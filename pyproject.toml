@@ -57,6 +57,7 @@ Documentation = "https://github.com/yourusername/nokta-ai#readme"
 nokta = "nokta_ai.cli.main:main"
 nokta-train = "nokta_ai.cli.train:main"
 nokta-inference = "nokta_ai.cli.inference:main"
+nokta-evaluate = "nokta_ai.cli.evaluate:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -116,7 +116,27 @@ nokta-train \
     --output my_model.pth
 ```
 
-#### 3. Advanced Inference
+#### 3. Model Evaluation
+
+Evaluate your model's accuracy on test datasets:
+
+```bash
+# Evaluate on provided test dataset
+nokta evaluate --model path/to/model.pth --test-file data/test_datasets/vikipedi_test.txt
+
+# Save detailed evaluation results
+nokta-evaluate --model path/to/model.pth \
+                --test-file data/test_datasets/vikipedi_test.txt \
+                --output evaluation_results.txt
+
+# The evaluation provides:
+# - Character-level accuracy (precise diacritic restoration)
+# - Word-level accuracy (complete word correctness)
+# - Per-sentence breakdown with detailed analysis
+# - Overall performance statistics
+```
+
+#### 4. Advanced Inference
 
 ```bash
 # Interactive mode
@@ -153,6 +173,52 @@ mapper = nokta_ai.TurkishDiacriticsMapper()
 stripped = mapper.remove_diacritics("Günaydın dünya")
 normalized = mapper.normalize_text("  MERHABA!!!  ")
 ```
+
+## Test Datasets
+
+The repository includes test datasets for evaluating model accuracy:
+
+### Included Test Files
+
+- **`data/test_datasets/vikipedi_test.txt`**: 290 lines of high-quality Turkish text from Wikipedia
+- **Content**: Turkish constitutional history with proper diacritics
+- **Purpose**: Benchmark model performance on real-world text
+
+### Adding Your Own Test Files
+
+To add custom test datasets:
+
+1. **Place files in**: `data/test_datasets/`
+2. **Format**: One sentence per line with correct diacritics
+3. **Encoding**: UTF-8 text files
+4. **Example structure**:
+   ```
+   Türkiye'nin başkenti Ankara'dır.
+   Öğrenciler sınıfta ders çalışıyor.
+   Çocuklar bahçede futbol oynuyorlar.
+   ```
+
+### Using Test Datasets
+
+```bash
+# Evaluate on included test dataset
+nokta evaluate --model your_model.pth --test-file data/test_datasets/vikipedi_test.txt
+
+# Evaluate on your custom test file
+nokta evaluate --model your_model.pth --test-file data/test_datasets/your_test.txt
+
+# Get detailed analysis
+nokta-evaluate --model your_model.pth \
+                --test-file data/test_datasets/vikipedi_test.txt \
+                --output detailed_results.txt
+```
+
+The evaluation system automatically:
+- Removes diacritics from test sentences to create input
+- Restores diacritics using your model
+- Compares against ground truth
+- Reports character-level and word-level accuracy
+- Provides detailed per-sentence analysis
 
 ## Training Data
 

@@ -181,6 +181,9 @@ data/*.h5
 data/*.hdf5
 # Keep essential data files
 !data/.gitkeep
+!data/test_datasets/
+!data/test_datasets/*.txt
+!data/test_datasets/.gitkeep
 # Keep the Wikipedia corpus since it's provided
 !data/vikipedi_corpus.txt
 

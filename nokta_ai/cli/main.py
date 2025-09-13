@@ -143,6 +143,21 @@ def main():
                                  help='Path to trained model file')
     benchmark_parser.set_defaults(func=benchmark_model)
 
+    # Evaluate command
+    evaluate_parser = subparsers.add_parser('evaluate', help='Evaluate on test dataset')
+    evaluate_parser.add_argument('--model', type=str, required=True,
+                                help='Path to trained model file')
+    evaluate_parser.add_argument('--test-file', type=str, required=True,
+                                help='Path to test file (e.g., data/test_datasets/vikipedi_test.txt)')
+    evaluate_parser.add_argument('--output', type=str,
+                                help='Save detailed results to file')
+
+    def evaluate_command(args):
+        from .evaluate import evaluate_on_file
+        evaluate_on_file(args.model, args.test_file, args.output)
+
+    evaluate_parser.set_defaults(func=evaluate_command)
+
     # Parse arguments
     args = parser.parse_args()
 
