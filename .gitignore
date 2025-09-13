@@ -158,12 +158,17 @@ $RECYCLE.BIN/
 
 # Project specific ignores
 
-# Model files (large binary files)
-models/*.pth
-models/*.pt
-models/*.bin
-models/*.ckpt
-models/*.safetensors
+# Model files (large binary files) - distribute via releases
+*.pth
+*.pt
+*.bin
+*.ckpt
+*.safetensors
+models/**/*.pth
+models/**/*.pt
+models/**/*.bin
+models/**/*.ckpt
+models/**/*.safetensors
 # Keep the models directory structure
 !models/.gitkeep
 

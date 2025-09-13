@@ -1,6 +1,8 @@
-# Turkish Diacritics Restoration with Neural Networks
+# nokta-ai
 
-A PyTorch-based neural network system for restoring diacritics in Turkish text. This tool can accurately restore Turkish special characters (ç, ğ, ı, ö, ş, ü) from text where they have been removed or replaced with ASCII equivalents.
+Turkish Diacritics Restoration with Neural Networks
+
+A lightweight PyTorch-based neural network package for restoring diacritics in Turkish text. **nokta-ai** can accurately restore Turkish special characters (ç, ğ, ı, ö, ş, ü) from text where they have been removed or replaced with ASCII equivalents.
 
 ## Overview
 
@@ -31,112 +33,125 @@ This project implements a character-level sequence-to-sequence model using bidir
 
 ## Installation
 
+### From PyPI (Recommended)
+
+```bash
+pip install nokta-ai
+```
+
+### From Source
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd nokta-ai
+
+# Install in development mode
+pip install -e .
+
+# Or install with optional dependencies
+pip install -e ".[dev,data]"
+```
+
 ### Prerequisites
 
 - Python 3.9+
 - PyTorch 2.0+
 - Apple Silicon Mac (for MPS acceleration) or NVIDIA GPU (for CUDA)
 
-### Setup
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd karakter-ai
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-## Project Structure
+## Package Structure
 
 ```
-karakter-ai/
-├── diacritics_restoration.py  # Core model and training logic
-├── prepare_wiki_data.py       # Wikipedia corpus preparation
-├── train_wiki_model.py         # Training script for Wikipedia data
-├── inference.py                # Inference and evaluation tools
+nokta-ai/
+├── nokta_ai/
+│   ├── __init__.py           # Package initialization
+│   ├── core.py               # Main restoration classes
+│   ├── models/               # Neural network architectures
+│   ├── data/                 # Data processing utilities
+│   └── cli/                  # Command line interfaces
 ├── data/
-│   ├── vikipedi_corpus.txt    # Turkish Wikipedia corpus
-│   └── wikipedia_dataset_cache.pkl  # Preprocessed training data
-└── models/
-    └── wiki_diacritics_model.pth  # Trained model weights
+│   ├── vikipedi_corpus.txt   # Turkish Wikipedia corpus
+│   └── *.pkl                 # Preprocessed datasets (generated)
+├── models/                   # Trained model weights (generated)
+└── scripts/                  # Legacy training scripts
 ```
 
 ## Usage
 
-### 1. Data Preparation
+### Command Line Interface
 
-Prepare your Turkish text corpus for training:
+After installation, nokta-ai provides three CLI commands:
 
-```bash
-# Using Wikipedia corpus
-python prepare_wiki_data.py
-
-# This creates: data/wikipedia_dataset_cache.pkl
-```
-
-### 2. Training
-
-Train the model on your data:
-
-```bash
-# Basic training
-python train_wiki_model.py --epochs 50 --batch-size 64
-
-# Advanced training with custom parameters
-python train_wiki_model.py \
-    --epochs 100 \
-    --batch-size 128 \
-    --learning-rate 0.001 \
-    --hidden-size 512 \
-    --num-layers 4 \
-    --model-name my_model
-```
-
-Training parameters:
-- `--epochs`: Number of training epochs (default: 30)
-- `--batch-size`: Batch size for training (default: 64)
-- `--learning-rate`: Learning rate (default: 0.001)
-- `--hidden-size`: LSTM hidden dimension size (default: 512)
-- `--num-layers`: Number of LSTM layers (default: 4)
-- `--context-window`: Character context window (default: 100)
-
-### 3. Inference
-
-Use the trained model to restore diacritics:
+#### 1. Interactive Restoration
 
 ```bash
 # Interactive mode
-python inference.py --model models/wiki_diacritics_model.pth --interactive
+nokta restore --model path/to/model.pth
+
+# Direct text input
+nokta restore --model path/to/model.pth --text "Bugun hava cok guzel"
 
 # Process a file
-python inference.py \
-    --model models/wiki_diacritics_model.pth \
-    --input text_without_diacritics.txt \
-    --output restored_text.txt
+nokta restore --model path/to/model.pth --input input.txt --output output.txt
 
-# Direct text restoration
-python inference.py \
-    --model models/wiki_diacritics_model.pth \
-    --text "Bugun hava cok guzel"
-
-# Benchmark mode
-python inference.py --model models/wiki_diacritics_model.pth --benchmark
+# Benchmark model performance
+nokta benchmark --model path/to/model.pth
 ```
 
-## Example Usage in Python
+#### 2. Training
+
+```bash
+# Train with prepared dataset
+nokta-train --data-cache data/dataset.pkl --output my_model.pth
+
+# Train with configuration file
+nokta-train --data-cache data/dataset.pkl --config config.yaml --output my_model.pth
+
+# Override training parameters
+nokta-train \
+    --data-cache data/dataset.pkl \
+    --epochs 50 \
+    --batch-size 64 \
+    --learning-rate 0.001 \
+    --output my_model.pth
+```
+
+#### 3. Advanced Inference
+
+```bash
+# Interactive mode
+nokta-inference --model path/to/model.pth --interactive
+
+# File processing
+nokta-inference --model path/to/model.pth --file input.txt --output output.txt
+
+# Direct text
+nokta-inference --model path/to/model.pth --text "Turkiye'nin baskenti"
+```
+
+### Python API
 
 ```python
-from diacritics_restoration import DiacriticsRestorer
+import nokta_ai
 
 # Load trained model
-restorer = DiacriticsRestorer(model_path='models/wiki_diacritics_model.pth')
+restorer = nokta_ai.DiacriticsRestorer(model_path='path/to/model.pth')
 
 # Restore diacritics
 text_without = "Turkiye'nin baskenti Ankara'dir"
 text_restored = restorer.restore_diacritics(text_without)
 print(text_restored)  # "Türkiye'nin başkenti Ankara'dır"
+
+# Process multiple texts
+texts = ["Bugun hava guzel", "Cocuklar oynuyor"]
+for text in texts:
+    restored = restorer.restore_diacritics(text)
+    print(f"{text} -> {restored}")
+
+# Use mapper utilities
+mapper = nokta_ai.TurkishDiacriticsMapper()
+stripped = mapper.remove_diacritics("Günaydın dünya")
+normalized = mapper.normalize_text("  MERHABA!!!  ")
 ```
 
 ## Training Data
