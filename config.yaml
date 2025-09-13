@@ -1,0 +1,58 @@
+# Turkish Diacritics Restoration - Training Configuration
+
+# Model Architecture
+model:
+  vocab_size: 256
+  hidden_size: 512
+  num_layers: 4
+  dropout: 0.2
+  attention_heads: 8
+
+# Training Parameters
+training:
+  epochs: 50
+  batch_size: 64
+  learning_rate: 0.001
+  gradient_clip: 1.0
+  validation_split: 0.2
+  checkpoint_interval: 5  # Save checkpoint every N epochs
+  early_stopping_patience: 10  # Stop if no improvement for N epochs
+
+# Data Processing
+data:
+  context_window: 100  # Characters per training sample
+  stride: 50  # Sliding window stride
+  min_paragraph_length: 100  # Minimum paragraph length to include
+  max_sequence_length: 1000  # Maximum sequence length for processing
+
+# Paths
+paths:
+  corpus_file: "data/vikipedi_corpus.txt"
+  cache_file: "data/wikipedia_dataset_cache.pkl"
+  model_dir: "models"
+  log_dir: "logs"
+
+# Device Settings
+device:
+  prefer_mps: true  # Use Apple Silicon GPU if available
+  prefer_cuda: true  # Use NVIDIA GPU if available
+  cpu_fallback: true  # Fall back to CPU if no GPU available
+
+# Inference Settings
+inference:
+  beam_size: 1  # Beam search size (1 = greedy decoding)
+  temperature: 1.0  # Sampling temperature
+  context_overlap: 25  # Overlap between windows during inference
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  save_logs: true
+  tensorboard: false  # Enable TensorBoard logging
+
+# Optimization
+optimization:
+  optimizer: "adam"  # adam, sgd, adamw
+  weight_decay: 0.0001
+  scheduler: "cosine"  # none, step, cosine, plateau
+  warmup_steps: 100

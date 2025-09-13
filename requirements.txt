@@ -1,0 +1,15 @@
+# Turkish Diacritics Restoration - Requirements
+
+# Core dependencies
+torch>=2.0.0
+numpy<2.0.0  # Use numpy 1.x for compatibility
+tqdm>=4.65.0
+pyyaml>=6.0.0  # For configuration files
+
+# Optional dependencies for data processing
+requests>=2.28.0  # For downloading Wikipedia data
+
+# Development dependencies (optional)
+pytest>=7.3.0
+black>=23.0.0
+flake8>=6.0.0
