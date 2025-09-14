@@ -48,10 +48,10 @@ data = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/nokta-ai"
-Repository = "https://github.com/yourusername/nokta-ai"
-Documentation = "https://github.com/yourusername/nokta-ai#readme"
-"Bug Tracker" = "https://github.com/yourusername/nokta-ai/issues"
+Homepage = "https://github.com/armish/nokta-ai"
+Repository = "https://github.com/armish/nokta-ai"
+Documentation = "https://github.com/armish/nokta-ai#readme"
+"Bug Tracker" = "https://github.com/armish/nokta-ai/issues"
 
 [project.scripts]
 nokta = "nokta_ai.cli.main:main"

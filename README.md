@@ -43,7 +43,7 @@ pip install nokta-ai
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/armish/nokta-ai.git
 cd nokta-ai
 
 # Install in development mode
@@ -344,7 +344,7 @@ If you use this work in your research, please cite:
 @software{turkish_diacritics_nn,
   title = {Turkish Diacritics Restoration with Neural Networks},
   year = {2024},
-  url = {https://github.com/yourusername/karakter-ai}
+  url = {https://github.com/armish/nokta-ai}
 }
 ```
 
