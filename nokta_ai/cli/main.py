@@ -19,8 +19,13 @@ def restore_text(args):
         print(f"Error: Model file {args.model} not found")
         sys.exit(1)
 
-    # Load model
-    restorer = DiacriticsRestorer(model_path=args.model)
+    # Load model (constrained model is now the default)
+    if args.context_size:
+        print(f"Using context size: {args.context_size}")
+        restorer = DiacriticsRestorer(model_path=args.model, context_size=args.context_size)
+    else:
+        print("Using context size from checkpoint")
+        restorer = DiacriticsRestorer(model_path=args.model)
 
     if args.text:
         # Direct text input
@@ -135,6 +140,8 @@ def main():
                                help='Input file path')
     restore_parser.add_argument('--output', type=str,
                                help='Output file path')
+    restore_parser.add_argument('--context-size', type=int,
+                               help='Override context size (default: use value from model checkpoint)')
     restore_parser.set_defaults(func=restore_text)
 
     # Benchmark command
@@ -151,10 +158,12 @@ def main():
                                 help='Path to test file (e.g., data/test_datasets/vikipedi_test.txt)')
     evaluate_parser.add_argument('--output', type=str,
                                 help='Save detailed results to file')
+    evaluate_parser.add_argument('--context-size', type=int,
+                                help='Override context size (default: use value from model checkpoint)')
 
     def evaluate_command(args):
-        from .evaluate import evaluate_on_file
-        evaluate_on_file(args.model, args.test_file, args.output)
+        from .evaluate_constrained import evaluate_constrained_model
+        evaluate_constrained_model(args.model, args.test_file, args.output, args.context_size)
 
     evaluate_parser.set_defaults(func=evaluate_command)
 

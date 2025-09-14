@@ -2,6 +2,6 @@
 Neural network models for diacritics restoration
 """
 
-from .architecture import DiacriticsRestorationModel
+from .constrained import ConstrainedDiacriticsModel, ConstrainedDiacriticsRestorer
 
-__all__ = ["DiacriticsRestorationModel"]
+__all__ = ["ConstrainedDiacriticsModel", "ConstrainedDiacriticsRestorer"]

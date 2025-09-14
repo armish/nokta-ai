@@ -222,3 +222,5 @@ mlruns/
 # DVC
 .dvc/
 .dvcignore
+
+*/*.pth.wip

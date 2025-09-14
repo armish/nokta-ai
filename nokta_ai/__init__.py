@@ -9,13 +9,11 @@ __author__ = "nokta-ai contributors"
 __email__ = "contributors@nokta-ai.org"
 
 from .core import DiacriticsRestorer, TurkishDiacriticsMapper
-from .models import DiacriticsRestorationModel
-from .data import CharacterTokenizer, TurkishDiacriticsDataset
+from .models import ConstrainedDiacriticsModel, ConstrainedDiacriticsRestorer
 
 __all__ = [
     "DiacriticsRestorer",
     "TurkishDiacriticsMapper",
-    "DiacriticsRestorationModel",
-    "CharacterTokenizer",
-    "TurkishDiacriticsDataset"
+    "ConstrainedDiacriticsModel",
+    "ConstrainedDiacriticsRestorer"
 ]

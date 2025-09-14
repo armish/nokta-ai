@@ -66,14 +66,15 @@ nokta-ai/
 ├── nokta_ai/
 │   ├── __init__.py           # Package initialization
 │   ├── core.py               # Main restoration classes
-│   ├── models/               # Neural network architectures
-│   ├── data/                 # Data processing utilities
+│   ├── models/               # Neural network architectures (constrained model)
 │   └── cli/                  # Command line interfaces
 ├── data/
 │   ├── vikipedi_corpus.txt   # Turkish Wikipedia corpus
+│   ├── aysnrgenc_turkishdeasciifier_train.txt  # Additional training data
 │   └── *.pkl                 # Preprocessed datasets (generated)
 ├── models/                   # Trained model weights (generated)
-└── scripts/                  # Legacy training scripts
+└── scripts/
+    └── prepare_training_data.py  # Script to prepare training cache from corpus files
 ```
 
 ## Usage
@@ -102,17 +103,16 @@ nokta benchmark --model path/to/model.pth
 
 ```bash
 # Train with prepared dataset
-nokta-train --data-cache data/dataset.pkl --output my_model.pth
-
-# Train with configuration file
-nokta-train --data-cache data/dataset.pkl --config config.yaml --output my_model.pth
+nokta-train --data-cache data/combined_cache.pkl --output my_model.pth
 
 # Override training parameters
 nokta-train \
-    --data-cache data/dataset.pkl \
+    --data-cache data/combined_cache.pkl \
     --epochs 50 \
     --batch-size 64 \
-    --learning-rate 0.001 \
+    --learning-rate 0.0003 \
+    --context-size 96 \
+    --hidden-size 256 \
     --output my_model.pth
 ```
 
@@ -221,6 +221,17 @@ The evaluation system automatically:
 - Provides detailed per-sentence analysis
 
 ## Training Data
+
+### Preparing Training Data
+
+Before training, prepare your corpus data:
+
+```bash
+# Combines vikipedi_corpus.txt and aysnrgenc_turkishdeasciifier_train.txt
+python scripts/prepare_training_data.py
+
+# This creates data/combined_cache.pkl for training
+```
 
 The system can be trained on any Turkish text corpus. Best results are achieved with:
 
