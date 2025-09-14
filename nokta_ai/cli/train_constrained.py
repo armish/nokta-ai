@@ -14,8 +14,120 @@ from datetime import datetime
 from ..models.constrained import (
     ConstrainedDiacriticsModel,
     ConstrainedDiacriticsRestorer,
-    create_constrained_training_data
+    create_constrained_training_data,
+    remove_diacritics_simple
 )
+from collections import Counter
+import random
+
+
+def balance_training_samples(training_samples, target_samples_per_char=None):
+    """Balance training samples to ensure equal representation of each character type"""
+
+    if not training_samples:
+        return training_samples
+
+    print("Balancing training samples for equal character representation...")
+
+    # Group samples by which character types they contain
+    char_to_samples = {'c': [], 'g': [], 'i': [], 'o': [], 's': [], 'u': []}
+
+    for sample in training_samples:
+        labels = sample.get('labels', {})
+        for char_type in labels.keys():
+            base_char = char_type.lower()
+            if base_char in char_to_samples:
+                char_to_samples[base_char].append(sample)
+
+    # Print current distribution
+    print("Current sample distribution by character type:")
+    for char, samples in char_to_samples.items():
+        print(f"  {char}/{char.upper()}: {len(samples):,} samples")
+
+    # Determine target number of samples per character
+    if target_samples_per_char is None:
+        # Use the minimum count to ensure we don't lose rare characters
+        min_count = min(len(samples) for samples in char_to_samples.values() if len(samples) > 0)
+        target_samples_per_char = min_count
+        print(f"Auto-selected target: {target_samples_per_char:,} samples per character")
+    else:
+        print(f"Target: {target_samples_per_char:,} samples per character")
+
+    # Balance by sampling from each character type
+    balanced_samples = set()  # Use set to avoid duplicates
+
+    for char, samples in char_to_samples.items():
+        if len(samples) == 0:
+            print(f"Warning: No samples found for character '{char}'")
+            continue
+
+        if len(samples) >= target_samples_per_char:
+            # Randomly sample if we have enough
+            selected = random.sample(samples, target_samples_per_char)
+        else:
+            # Use all samples if we don't have enough (with possible duplicates)
+            selected = samples
+            # Oversample to reach target
+            while len(selected) < target_samples_per_char:
+                selected.extend(random.choices(samples, k=min(len(samples), target_samples_per_char - len(selected))))
+
+        # Add to balanced set (duplicates automatically removed)
+        for sample in selected:
+            balanced_samples.add(id(sample))  # Use id to track unique objects
+
+    # Convert back to list of unique samples
+    balanced_list = []
+    sample_ids = set()
+
+    for sample in training_samples:
+        if id(sample) in balanced_samples and id(sample) not in sample_ids:
+            balanced_list.append(sample)
+            sample_ids.add(id(sample))
+
+    print(f"Balanced dataset: {len(balanced_list):,} samples (was {len(training_samples):,})")
+    return balanced_list
+
+
+def calculate_character_frequencies(train_texts):
+    """Calculate frequency weights for diacritic character types"""
+    diacritic_chars = {'c', 'C', 'g', 'G', 'i', 'I', 'o', 'O', 's', 'S', 'u', 'U'}
+    char_counts = Counter()
+
+    print("Calculating character frequencies for loss weighting...")
+
+    for text in train_texts:
+        # Remove diacritics to get input text
+        input_text = remove_diacritics_simple(text)
+        target_text = text
+
+        # Count characters that need diacritic restoration
+        for input_char, target_char in zip(input_text, target_text):
+            if input_char != target_char and input_char in diacritic_chars:
+                # Map both cases to lowercase for consistency
+                base_char = input_char.lower()
+                char_counts[base_char] += 1
+
+    # Calculate total diacritic characters
+    total_diacritic_chars = sum(char_counts.values())
+
+    if total_diacritic_chars == 0:
+        print("Warning: No diacritic characters found in training data!")
+        return {char: 1.0 for char in ['c', 'g', 'i', 'o', 's', 'u']}
+
+    # Calculate frequencies (what portion each character represents)
+    frequencies = {}
+    for char in ['c', 'g', 'i', 'o', 's', 'u']:
+        count = char_counts.get(char, 0)
+        frequency = count / total_diacritic_chars
+        frequencies[char] = frequency
+        frequencies[char.upper()] = frequency  # Same weight for uppercase
+
+    print("Character frequencies in training data:")
+    for char in ['c', 'g', 'i', 'o', 's', 'u']:
+        count = char_counts.get(char, 0)
+        print(f"  {char}/{char.upper()}: {frequencies[char]:.3f} ({count:,} occurrences)")
+
+    return frequencies
 
 
 class ConstrainedDiacriticsDataset(Dataset):
@@ -94,10 +206,20 @@ def train_constrained_model(args):
     max_train_texts = getattr(args, 'max_train_texts', 10000)
     max_val_texts = getattr(args, 'max_val_texts', 1000)
 
-    train_samples = create_constrained_training_data(train_texts[:max_train_texts], context_size=context_size)
+    # Calculate character frequencies for loss weighting
+    selected_train_texts = train_texts[:max_train_texts]
+    char_frequencies = calculate_character_frequencies(selected_train_texts)
+
+    train_samples = create_constrained_training_data(selected_train_texts, context_size=context_size)
     val_samples = create_constrained_training_data(val_texts[:max_val_texts], context_size=context_size)
 
     print(f"Created {len(train_samples)} training samples, {len(val_samples)} validation samples")
+
+    # Apply balanced sampling if requested
+    if getattr(args, 'balanced_sampling', False):
+        train_samples = balance_training_samples(train_samples,
+                                               target_samples_per_char=getattr(args, 'samples_per_char', None))
+        print("Applied balanced sampling to training data")
 
     if len(train_samples) == 0:
         print("No training samples created! Check your data.")
@@ -138,9 +260,9 @@ def train_constrained_model(args):
             optimizer.zero_grad()
             predictions = model(contexts, targets)
 
-            # Calculate loss for each character type
+            # Calculate frequency-weighted loss for each character type
             batch_loss = 0
-            batch_count = 0
+            total_weight = 0
 
             # Collect all labels for each character type across the batch
             for char_type, pred_data in predictions.items():
@@ -168,23 +290,29 @@ def train_constrained_model(args):
                                 # Skip this sample if label count doesn't match
                                 logit_idx += num_matches_in_sample
 
-                    # Compute loss if we have matching labels and predictions
+                    # Compute frequency-weighted loss if we have matching labels and predictions
                     if len(all_labels) > 0 and len(all_labels) <= all_logits.size(0):
                         labels_tensor = torch.tensor(all_labels, dtype=torch.long).to(device)
-                        loss = nn.CrossEntropyLoss()(all_logits[:len(all_labels)], labels_tensor)
-                        batch_loss += loss
-                        batch_count += 1
+                        char_loss = nn.CrossEntropyLoss()(all_logits[:len(all_labels)], labels_tensor)
 
-            if batch_count > 0:
-                batch_loss = batch_loss / batch_count
+                        # Apply frequency weight for this character type
+                        char_weight = char_frequencies.get(char_type, 1.0)
+                        weighted_loss = char_loss * char_weight
+
+                        batch_loss += weighted_loss
+                        total_weight += char_weight
+
+            if total_weight > 0:
+                # Normalize by total weight instead of count
+                batch_loss = batch_loss / total_weight
                 batch_loss.backward()
                 optimizer.step()
 
                 total_loss += batch_loss.item()
-                total_samples += 1  # Count batches, not individual predictions
+                total_samples += 1  # Count batches
 
             if batch_idx % 10 == 0:
-                current_loss = batch_loss.item() if batch_count > 0 else 0
+                current_loss = batch_loss.item() if total_weight > 0 else 0
                 print(f"Epoch {epoch+1}/{args.epochs}, Batch {batch_idx}, Loss: {current_loss:.4f}")
 
         avg_loss = total_loss / max(total_samples, 1)  # Now dividing by number of batches
@@ -233,6 +361,10 @@ def main():
                        help='Maximum number of training texts to use (default: 10000)')
     parser.add_argument('--max-val-texts', type=int, default=1000,
                        help='Maximum number of validation texts to use (default: 1000)')
+    parser.add_argument('--balanced-sampling', action='store_true',
+                       help='Apply balanced sampling to ensure equal character representation')
+    parser.add_argument('--samples-per-char', type=int,
+                       help='Target number of samples per character type (auto if not specified)')
 
     args = parser.parse_args()
 
