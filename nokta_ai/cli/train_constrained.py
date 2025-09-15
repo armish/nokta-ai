@@ -15,7 +15,8 @@ from ..models.constrained import (
     ConstrainedDiacriticsModel,
     ConstrainedDiacriticsRestorer,
     create_constrained_training_data,
-    remove_diacritics_simple
+    remove_diacritics_simple,
+    detect_optimal_device
 )
 from collections import Counter
 import random
@@ -232,12 +233,30 @@ def train_constrained_model(args):
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, collate_fn=collate_fn)
 
-    # Initialize model
-    device = torch.device('mps' if torch.backends.mps.is_available()
-                         else 'cuda' if torch.cuda.is_available()
-                         else 'cpu')
+    # Initialize model with enhanced device detection
+    print("Detecting optimal device for training...")
+    device = detect_optimal_device(verbose=True)
 
-    print(f"Using device: {device}")
+    # CUDA-specific optimizations
+    if device.type == 'cuda':
+        print(f"\nCUDA Optimization Tips:")
+        if args.batch_size < 32:
+            print(f"   - Consider increasing batch size (current: {args.batch_size}, try: 64-128)")
+        if torch.cuda.get_device_properties(0).total_memory > 40e9:  # >40GB memory
+            print(f"   - High-memory GPU detected - can handle large models")
+            print(f"   - Try: --cuda-config for optimized settings")
+        elif torch.cuda.get_device_properties(0).total_memory > 10e9:  # >10GB memory
+            print(f"   - Mid-range GPU detected - good for medium models")
+        print(f"   - GPU will be fully utilized during training")
+
+    elif device.type == 'cpu':
+        print(f"\nCPU Performance Warnings:")
+        if args.batch_size > 8:
+            print(f"   - Consider reducing batch size (current: {args.batch_size}, try: 4-8)")
+        if args.context_size > 50:
+            print(f"   - Consider reducing context size (current: {args.context_size}, try: 20-30)")
+        if use_attention:
+            print(f"   - Consider disabling attention (--no-attention) for faster training")
 
     # Get additional model parameters
     num_lstm_layers = getattr(args, 'num_lstm_layers', 2)
@@ -399,7 +418,50 @@ def main():
     parser.add_argument('--samples-per-char', type=int,
                        help='Target number of samples per character type (auto if not specified)')
 
+    # Platform-specific configurations
+    parser.add_argument('--cuda-config', action='store_true',
+                       help='Use CUDA-optimized configuration (large batch, context, hidden size)')
+    parser.add_argument('--mps-config', action='store_true',
+                       help='Use MPS-optimized configuration (medium batch, context, hidden size)')
+    parser.add_argument('--cpu-config', action='store_true',
+                       help='Use CPU-optimized configuration (small batch, context, no attention)')
+
     args = parser.parse_args()
+
+    # Apply pre-configured settings
+    if args.cuda_config:
+        print("🚀 Applying CUDA-optimized configuration...")
+        args.batch_size = 128
+        args.context_size = 128
+        args.hidden_size = 512
+        args.use_attention = True
+        args.learning_rate = 0.001  # Slightly higher for larger batches
+        print(f"   - Batch size: {args.batch_size}")
+        print(f"   - Context size: {args.context_size}")
+        print(f"   - Hidden size: {args.hidden_size}")
+        print(f"   - Learning rate: {args.learning_rate}")
+
+    elif args.mps_config:
+        print("🍎 Applying MPS-optimized configuration...")
+        args.batch_size = 64
+        args.context_size = 96
+        args.hidden_size = 256
+        args.use_attention = True
+        print(f"   - Batch size: {args.batch_size}")
+        print(f"   - Context size: {args.context_size}")
+        print(f"   - Hidden size: {args.hidden_size}")
+        print(f"   - Attention: {args.use_attention}")
+
+    elif args.cpu_config:
+        print("💻 Applying CPU-optimized configuration...")
+        args.batch_size = 4
+        args.context_size = 20
+        args.hidden_size = 128
+        args.use_attention = False
+        print(f"   - Batch size: {args.batch_size}")
+        print(f"   - Context size: {args.context_size}")
+        print(f"   - Hidden size: {args.hidden_size}")
+        print(f"   - Attention: {args.use_attention}")
 
     # Create output directory
     Path(args.output).parent.mkdir(exist_ok=True)

@@ -149,6 +149,14 @@ nokta restore --model models/my_model.pth --input input.txt --output output.txt
 | `--balanced-sampling` | False | Equal representation of each character type |
 | `--samples-per-char` | Auto | Target samples per character (auto-detected if not specified) |
 
+### Platform-Specific Configurations
+
+| Parameter | Description |
+|-----------|-------------|
+| `--cuda-config` | CUDA-optimized: batch=128, context=128, hidden=512, attention=on |
+| `--mps-config` | MPS-optimized: batch=64, context=96, hidden=256, attention=on |
+| `--cpu-config` | CPU-optimized: batch=4, context=20, hidden=128, attention=off |
+
 ### Example Training Commands
 
 ```bash
@@ -176,6 +184,24 @@ nokta-train --data-cache data/combined_cache.pkl \
             --use-attention \
             --epochs 100 \
             --batch-size 8
+
+# CUDA GPU optimized (automatic configuration)
+nokta-train --data-cache data/combined_cache.pkl \
+            --output models/cuda_optimized.pth \
+            --cuda-config \
+            --epochs 50
+
+# MPS optimized (automatic configuration)
+nokta-train --data-cache data/combined_cache.pkl \
+            --output models/mps_optimized.pth \
+            --mps-config \
+            --epochs 50
+
+# CPU optimized (automatic configuration)
+nokta-train --data-cache data/combined_cache.pkl \
+            --output models/cpu_optimized.pth \
+            --cpu-config \
+            --epochs 20
 ```
 
 ## Evaluation Parameters
@@ -362,17 +388,76 @@ The model automatically stops when output converges between passes.
 
 ### Hardware Acceleration
 
-The system automatically detects and uses available acceleration:
+The system automatically detects and uses optimal hardware acceleration with intelligent warnings and recommendations:
 
-1. **MPS (Metal Performance Shaders)**: Apple Silicon Macs
-2. **CUDA**: NVIDIA GPUs
-3. **CPU**: Fallback for other systems
+#### **1. NVIDIA CUDA (Recommended for Large-Scale Training)**
+- **Professional GPUs**: Tesla, V100, A100 - excellent for large models and batch sizes
+- **Consumer GPUs**: RTX/GTX - good performance for most training tasks
+- **Automatic optimization tips**: Batch size and model size recommendations based on GPU memory
+- **Memory detection**: Automatically suggests configurations for high-memory GPUs
+
+```bash
+# CUDA-optimized training (automatic configuration)
+nokta-train --data-cache data/combined_cache.pkl \
+            --output models/cuda_model.pth \
+            --cuda-config \
+            --epochs 50
+
+# Manual CUDA optimization for high-memory GPUs
+nokta-train --data-cache data/combined_cache.pkl \
+            --output models/cuda_manual.pth \
+            --batch-size 128 \
+            --context-size 128 \
+            --hidden-size 512 \
+            --epochs 50
+```
+
+#### **2. Apple Silicon MPS (M1/M2/M3)**
+- **Excellent performance**: Optimized for Apple Silicon processors
+- **Energy efficient**: Lower power consumption than NVIDIA GPUs
+- **Automatic detection**: Works seamlessly on Mac systems
+- **Memory efficient**: Good balance of performance and resource usage
+
+```bash
+# MPS-optimized training (automatic configuration)
+nokta-train --data-cache data/combined_cache.pkl \
+            --output models/mps_model.pth \
+            --mps-config \
+            --epochs 50
+```
+
+#### **3. CPU Fallback (With Warnings)**
+- **Performance warnings**: Alerts about slow training speed
+- **Optimization suggestions**: Smaller models and configuration tips
+- **CPU-optimized presets**: Automatic small model configurations
+
+```bash
+# CPU-optimized training (automatic configuration)
+nokta-train --data-cache data/combined_cache.pkl \
+            --output models/cpu_model.pth \
+            --cpu-config \
+            --epochs 30
+```
 
 ### Benchmarks
 
-On Apple M1/M2 with MPS:
-- Training speed: ~1000 samples/second
-- Inference speed: ~5,000-10,000 characters/second
+#### **NVIDIA CUDA GPUs**
+- **High-memory GPUs** (A100, V100, Tesla): ~5,000-8,000 samples/second training, ~50,000+ characters/second inference
+- **Consumer GPUs** (RTX/GTX): ~2,000-4,000 samples/second training, ~20,000-30,000 characters/second inference
+- Recommended: Use `--cuda-config` for optimal settings
+- Can handle large models with sufficient GPU memory
+
+#### **Apple M1/M2/M3 with MPS**
+- Training speed: ~1,000-2,000 samples/second
+- Inference speed: ~10,000-20,000 characters/second
+- Memory efficient: Good for models up to 512 hidden size
+- Energy efficient: Lower power consumption
+- Recommended: Use `--mps-config` for optimal settings
+
+#### **CPU Fallback**
+- Training speed: ~50-100 samples/second ⚠️
+- Inference speed: ~1,000 characters/second ⚠️
+- Use only for small models and testing
 
 ### Expected Accuracy
 

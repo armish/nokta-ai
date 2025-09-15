@@ -7,6 +7,75 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+import warnings
+
+
+def detect_optimal_device(verbose=True):
+    """
+    Detect optimal device for PyTorch operations with detailed logging and warnings.
+
+    Priority: MPS (Apple Silicon) > CUDA (NVIDIA) > CPU
+
+    Args:
+        verbose (bool): Whether to print device detection information
+
+    Returns:
+        torch.device: Optimal device for computations
+    """
+
+    # Check for Apple Silicon MPS
+    if torch.backends.mps.is_available():
+        device = torch.device('mps')
+        if verbose:
+            print("🚀 Detected Apple Silicon with MPS acceleration")
+            print("   - Excellent performance for training and inference")
+            print("   - Optimized for M1/M2/M3 processors")
+        return device
+
+    # Check for NVIDIA CUDA
+    elif torch.cuda.is_available():
+        device = torch.device('cuda')
+        cuda_device_count = torch.cuda.device_count()
+        cuda_device_name = torch.cuda.get_device_name(0)
+        cuda_memory = torch.cuda.get_device_properties(0).total_memory / 1e9
+
+        if verbose:
+            print(f"🚀 Detected NVIDIA GPU with CUDA acceleration")
+            print(f"   - Device: {cuda_device_name}")
+            print(f"   - GPU Memory: {cuda_memory:.1f} GB")
+            print(f"   - Available GPUs: {cuda_device_count}")
+
+            # GPU-specific recommendations
+            if cuda_memory > 40:  # >40GB memory
+                print("   - 🎯 High-memory GPU detected! Excellent for large-scale training")
+                print("   - Recommended: Use larger batch sizes (64-256)")
+                print("   - Try: --cuda-config for optimized settings")
+            elif "RTX" in cuda_device_name or "GTX" in cuda_device_name:
+                print("   - Consumer GPU detected - good performance expected")
+            elif "Tesla" in cuda_device_name or "V100" in cuda_device_name or "A100" in cuda_device_name:
+                print("   - Professional GPU detected - excellent for training")
+
+        return device
+
+    # Fallback to CPU with warnings
+    else:
+        device = torch.device('cpu')
+        if verbose:
+            print("⚠️  Using CPU - Limited performance expected")
+            print("   - Training will be significantly slower")
+            print("   - Consider using smaller models (context=20, hidden=128)")
+            print("   - Recommended: Use --no-attention for faster training")
+            print("   - For production: Consider cloud GPU instances")
+
+        # Issue a warning for performance
+        warnings.warn(
+            "Training on CPU will be very slow. Consider using a GPU-enabled machine "
+            "or cloud instance with NVIDIA CUDA or Apple Silicon MPS support.",
+            UserWarning,
+            stacklevel=2
+        )
+
+        return device
 
 
 class MultiHeadSelfAttention(nn.Module):
@@ -186,10 +255,9 @@ class ConstrainedDiacriticsRestorer:
 
     def __init__(self, model_path: str = None, context_size: int = 100,
                  hidden_size: int = 128, num_lstm_layers: int = 2,
-                 use_attention: bool = True):
-        self.device = torch.device('mps' if torch.backends.mps.is_available()
-                                 else 'cuda' if torch.cuda.is_available()
-                                 else 'cpu')
+                 use_attention: bool = True, verbose_device: bool = True):
+        # Use enhanced device detection
+        self.device = detect_optimal_device(verbose=verbose_device)
 
         self.context_size = context_size
         self.hidden_size = hidden_size
