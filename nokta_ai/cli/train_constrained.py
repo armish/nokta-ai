@@ -239,8 +239,25 @@ def train_constrained_model(args):
 
     print(f"Using device: {device}")
 
-    model = ConstrainedDiacriticsModel(context_size=context_size, hidden_size=args.hidden_size).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    # Get additional model parameters
+    num_lstm_layers = getattr(args, 'num_lstm_layers', 2)
+    use_attention = getattr(args, 'use_attention', True)
+
+    print(f"Model configuration:")
+    print(f"  Context size: {context_size}")
+    print(f"  Hidden size: {args.hidden_size}")
+    print(f"  LSTM layers: {num_lstm_layers}")
+    print(f"  Self-attention: {'Enabled' if use_attention else 'Disabled'}")
+
+    model = ConstrainedDiacriticsModel(
+        context_size=context_size,
+        hidden_size=args.hidden_size,
+        num_lstm_layers=num_lstm_layers,
+        use_attention=use_attention
+    ).to(device)
+
+    # Expert recommends AdamW with weight decay
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=1e-4)
 
     print("Starting training...")
     start_time = datetime.now()
@@ -319,13 +336,23 @@ def train_constrained_model(args):
         print(f"Epoch {epoch+1} completed. Average Loss: {avg_loss:.4f}")
 
         # Save work-in-progress checkpoint after each epoch
-        temp_restorer = ConstrainedDiacriticsRestorer(context_size=context_size)
+        temp_restorer = ConstrainedDiacriticsRestorer(
+            context_size=context_size,
+            hidden_size=args.hidden_size,
+            num_lstm_layers=num_lstm_layers,
+            use_attention=use_attention
+        )
         temp_restorer.model = model
         temp_restorer.save_model(wip_path)
         print(f"Checkpoint saved to {wip_path}")
 
     # Save final model
-    restorer = ConstrainedDiacriticsRestorer(context_size=context_size)
+    restorer = ConstrainedDiacriticsRestorer(
+        context_size=context_size,
+        hidden_size=args.hidden_size,
+        num_lstm_layers=num_lstm_layers,
+        use_attention=use_attention
+    )
     restorer.model = model
     restorer.save_model(args.output)
 
@@ -351,14 +378,20 @@ def main():
                        help='Number of training epochs (default: 20)')
     parser.add_argument('--batch-size', type=int, default=16,
                        help='Batch size (default: 16)')
-    parser.add_argument('--learning-rate', type=float, default=0.001,
-                       help='Learning rate (default: 0.001)')
-    parser.add_argument('--context-size', type=int, default=100,
-                       help='Context window size (default: 100)')
-    parser.add_argument('--hidden-size', type=int, default=128,
-                       help='Hidden layer size (default: 128)')
-    parser.add_argument('--max-train-texts', type=int, default=10000,
-                       help='Maximum number of training texts to use (default: 10000)')
+    parser.add_argument('--learning-rate', type=float, default=0.0003,
+                       help='Learning rate (default: 0.0003, expert recommended 3e-4)')
+    parser.add_argument('--context-size', type=int, default=96,
+                       help='Context window size (default: 96, expert recommended)')
+    parser.add_argument('--hidden-size', type=int, default=256,
+                       help='Hidden layer size (default: 256, expert recommended)')
+    parser.add_argument('--num-lstm-layers', type=int, default=2,
+                       help='Number of LSTM layers (default: 2, expert recommends 2-4)')
+    parser.add_argument('--use-attention', action='store_true', default=True,
+                       help='Use self-attention layer (default: True, expert recommended)')
+    parser.add_argument('--no-attention', dest='use_attention', action='store_false',
+                       help='Disable self-attention layer')
+    parser.add_argument('--max-train-texts', type=int, default=15000,
+                       help='Maximum number of training texts to use (default: 15000)')
     parser.add_argument('--max-val-texts', type=int, default=1000,
                        help='Maximum number of validation texts to use (default: 1000)')
     parser.add_argument('--balanced-sampling', action='store_true',

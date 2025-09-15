@@ -6,6 +6,59 @@ Only focuses on specific character pairs: c/ç, g/ğ, i/ı, o/ö, s/ş, u/ü
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
+
+
+class MultiHeadSelfAttention(nn.Module):
+    """Multi-Head Self-Attention layer for capturing long-range dependencies"""
+
+    def __init__(self, d_model, num_heads=4, dropout=0.1):
+        super().__init__()
+        assert d_model % num_heads == 0
+
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.d_k = d_model // num_heads
+
+        # Linear projections for Q, K, V
+        self.w_q = nn.Linear(d_model, d_model)
+        self.w_k = nn.Linear(d_model, d_model)
+        self.w_v = nn.Linear(d_model, d_model)
+        self.w_o = nn.Linear(d_model, d_model)
+
+        self.dropout = nn.Dropout(dropout)
+        self.layer_norm = nn.LayerNorm(d_model)
+
+    def forward(self, x):
+        batch_size, seq_len, d_model = x.shape
+
+        # Residual connection
+        residual = x
+
+        # Linear projections in batch from d_model => h x d_k
+        Q = self.w_q(x).view(batch_size, seq_len, self.num_heads, self.d_k).transpose(1, 2)
+        K = self.w_k(x).view(batch_size, seq_len, self.num_heads, self.d_k).transpose(1, 2)
+        V = self.w_v(x).view(batch_size, seq_len, self.num_heads, self.d_k).transpose(1, 2)
+
+        # Attention
+        scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_k)
+        attn_weights = F.softmax(scores, dim=-1)
+        attn_weights = self.dropout(attn_weights)
+
+        # Apply attention to values
+        context = torch.matmul(attn_weights, V)
+
+        # Concatenate heads
+        context = context.transpose(1, 2).contiguous().view(batch_size, seq_len, d_model)
+
+        # Final linear projection
+        output = self.w_o(context)
+        output = self.dropout(output)
+
+        # Add & Norm
+        output = self.layer_norm(output + residual)
+
+        return output
 
 
 class ConstrainedDiacriticsModel(nn.Module):
@@ -30,27 +83,45 @@ class ConstrainedDiacriticsModel(nn.Module):
         'U': ['U', 'Ü']
     }
 
-    def __init__(self, context_size: int = 100, hidden_size: int = 128):
+    def __init__(self, context_size: int = 100, hidden_size: int = 128,
+                 num_lstm_layers: int = 2, use_attention: bool = True):
         """
         Args:
             context_size: Number of characters to look at around target character
             hidden_size: Hidden dimension size for the neural network
+            num_lstm_layers: Number of LSTM layers (default: 2, expert recommends 2-4)
+            use_attention: Whether to use self-attention layer (default: True)
         """
         super().__init__()
         self.context_size = context_size
         self.hidden_size = hidden_size
+        self.num_lstm_layers = num_lstm_layers
+        self.use_attention = use_attention
 
         # Character embedding (for context characters)
-        self.char_embedding = nn.Embedding(256, 64)  # Support basic ASCII + extended
+        # Expert recommends 128 for embedding dim
+        self.char_embedding = nn.Embedding(256, 128)  # Increased from 64 to 128
 
         # Bidirectional LSTM for context understanding
+        # Expert recommends dropout of 0.25 between layers
+        dropout = 0.25 if num_lstm_layers > 1 else 0
         self.context_lstm = nn.LSTM(
-            64, hidden_size,
-            num_layers=2,
+            128, hidden_size,  # Updated embedding dim
+            num_layers=num_lstm_layers,
             bidirectional=True,
             batch_first=True,
-            dropout=0.1
+            dropout=dropout
         )
+
+        # Self-attention layer (optional but recommended by expert)
+        # Expert: "single lightweight self-attention layer helps on long compounds"
+        if use_attention:
+            # d_model = hidden_size * 2 (bidirectional)
+            self.self_attention = MultiHeadSelfAttention(
+                d_model=hidden_size * 2,
+                num_heads=4,  # Expert recommends 4 heads
+                dropout=0.1
+            )
 
         # Classification head for each diacritic pair (binary choice)
         self.classifiers = nn.ModuleDict({
@@ -81,10 +152,16 @@ class ConstrainedDiacriticsModel(nn.Module):
         # Process through LSTM
         lstm_out, _ = self.context_lstm(embedded)  # (batch*seq, context, hidden*2)
 
+        # Reshape back to (batch, seq, context, hidden*2) for attention
+        lstm_out = lstm_out.view(batch_size, seq_len, self.context_size, -1)
+
         # Use the middle character's representation (center of context window)
         center_idx = self.context_size // 2
-        features = lstm_out[:, center_idx, :]  # (batch*seq, hidden*2)
-        features = features.view(batch_size, seq_len, -1)
+        features = lstm_out[:, :, center_idx, :]  # (batch, seq, hidden*2)
+
+        # Apply self-attention if enabled (expert recommends this)
+        if self.use_attention:
+            features = self.self_attention(features)  # (batch, seq, hidden*2)
 
         # Classify each character position
         predictions = {}
@@ -107,13 +184,24 @@ class ConstrainedDiacriticsModel(nn.Module):
 class ConstrainedDiacriticsRestorer:
     """High-level interface for constrained diacritics restoration"""
 
-    def __init__(self, model_path: str = None, context_size: int = 100):
+    def __init__(self, model_path: str = None, context_size: int = 100,
+                 hidden_size: int = 128, num_lstm_layers: int = 2,
+                 use_attention: bool = True):
         self.device = torch.device('mps' if torch.backends.mps.is_available()
                                  else 'cuda' if torch.cuda.is_available()
                                  else 'cpu')
 
         self.context_size = context_size
-        self.model = ConstrainedDiacriticsModel(context_size=context_size).to(self.device)
+        self.hidden_size = hidden_size
+        self.num_lstm_layers = num_lstm_layers
+        self.use_attention = use_attention
+
+        self.model = ConstrainedDiacriticsModel(
+            context_size=context_size,
+            hidden_size=hidden_size,
+            num_lstm_layers=num_lstm_layers,
+            use_attention=use_attention
+        ).to(self.device)
 
         if model_path:
             self.load_model(model_path)
@@ -180,6 +268,9 @@ class ConstrainedDiacriticsRestorer:
         torch.save({
             'model_state_dict': self.model.state_dict(),
             'context_size': self.context_size,
+            'hidden_size': self.hidden_size,
+            'num_lstm_layers': self.num_lstm_layers,
+            'use_attention': self.use_attention,
         }, path)
         print(f'Constrained model saved to {path}')
 
@@ -187,20 +278,37 @@ class ConstrainedDiacriticsRestorer:
         """Load model checkpoint"""
         checkpoint = torch.load(path, map_location=self.device)
 
-        # Get the context size from checkpoint
-        saved_context_size = checkpoint.get('context_size', 7)  # Default to 7 for older models
+        # Get model configuration from checkpoint
+        saved_context_size = checkpoint.get('context_size', 100)
+        saved_hidden_size = checkpoint.get('hidden_size', 128)
+        saved_num_lstm_layers = checkpoint.get('num_lstm_layers', 2)
+        saved_use_attention = checkpoint.get('use_attention', False)  # Default False for old models
 
-        # Recreate model with correct context size if different
-        if saved_context_size != self.context_size:
-            print(f'Updating context size from {self.context_size} to {saved_context_size}')
+        # Recreate model with saved configuration
+        if (saved_context_size != self.context_size or
+            saved_hidden_size != self.hidden_size or
+            saved_num_lstm_layers != self.num_lstm_layers or
+            saved_use_attention != self.use_attention):
+            print(f'Loading model configuration from checkpoint:')
+            print(f'  context_size: {saved_context_size}')
+            print(f'  hidden_size: {saved_hidden_size}')
+            print(f'  num_lstm_layers: {saved_num_lstm_layers}')
+            print(f'  use_attention: {saved_use_attention}')
+
             self.context_size = saved_context_size
+            self.hidden_size = saved_hidden_size
+            self.num_lstm_layers = saved_num_lstm_layers
+            self.use_attention = saved_use_attention
+
             self.model = ConstrainedDiacriticsModel(
                 context_size=self.context_size,
-                hidden_size=128  # Default hidden size
+                hidden_size=self.hidden_size,
+                num_lstm_layers=self.num_lstm_layers,
+                use_attention=self.use_attention
             ).to(self.device)
 
         self.model.load_state_dict(checkpoint['model_state_dict'])
-        print(f'Constrained model loaded from {path} (context_size: {self.context_size})')
+        print(f'Constrained model loaded from {path}')
 
 
 def create_constrained_training_data(texts, context_size=100):
