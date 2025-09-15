@@ -160,10 +160,12 @@ def main():
                                 help='Save detailed results to file')
     evaluate_parser.add_argument('--context-size', type=int,
                                 help='Override context size (default: use value from model checkpoint)')
+    evaluate_parser.add_argument('--num-passes', type=int, default=1,
+                                help='Number of restoration passes (default: 1). Multiple passes can improve restoration of words with multiple diacritics.')
 
     def evaluate_command(args):
         from .evaluate_constrained import evaluate_constrained_model
-        evaluate_constrained_model(args.model, args.test_file, args.output, args.context_size)
+        evaluate_constrained_model(args.model, args.test_file, args.output, args.context_size, args.num_passes)
 
     evaluate_parser.set_defaults(func=evaluate_command)
 

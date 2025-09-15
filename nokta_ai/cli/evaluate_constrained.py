@@ -9,8 +9,8 @@ from pathlib import Path
 from ..models.constrained import ConstrainedDiacriticsRestorer, remove_diacritics_simple
 
 
-def evaluate_constrained_model(model_path: str, test_file: str, output_file: str = None, context_size: int = None):
-    """Evaluate constrained model on test file"""
+def evaluate_constrained_model(model_path: str, test_file: str, output_file: str = None, context_size: int = None, num_passes: int = 1):
+    """Evaluate constrained model on test file with optional multi-pass restoration"""
     if not Path(test_file).exists():
         print(f"Error: Test file {test_file} not found")
         sys.exit(1)
@@ -27,6 +27,9 @@ def evaluate_constrained_model(model_path: str, test_file: str, output_file: str
     else:
         print("Using context size from model checkpoint")
         restorer = ConstrainedDiacriticsRestorer(model_path=model_path)
+
+    if num_passes > 1:
+        print(f"Using {num_passes}-pass restoration")
 
     # Load test sentences
     with open(test_file, 'r', encoding='utf-8') as f:
@@ -58,8 +61,20 @@ def evaluate_constrained_model(model_path: str, test_file: str, output_file: str
         if i >= 5 and sentences_with_diacritics % 20 == 0:
             print(f"Processing sentence {sentences_with_diacritics}...")
 
-        # Restore diacritics
-        restored = restorer.restore_diacritics(input_text)
+        # Restore diacritics with multiple passes if requested
+        restored = input_text
+        for pass_num in range(num_passes):
+            previous = restored
+            restored = restorer.restore_diacritics(restored)
+            # Early exit if converged
+            if restored == previous:
+                if pass_num > 0 and i < 5:  # Show convergence info for first few examples
+                    print(f"  (Converged after {pass_num + 1} passes)")
+                break
+
+        # Show pass info for first few examples if multiple passes used
+        if num_passes > 1 and i < 5 and restored != restorer.restore_diacritics(input_text):
+            print(f"  (Used {num_passes} passes)")
 
         # Ensure same length (should be guaranteed by constrained model)
         if len(restored) != len(original):
@@ -118,6 +133,7 @@ def evaluate_constrained_model(model_path: str, test_file: str, output_file: str
     print("=" * 60)
     print(f"Test file: {test_file}")
     print(f"Sentences processed: {sentences_with_diacritics}")
+    print(f"Restoration passes: {num_passes}")
     print(f"Total characters: {total_chars}")
     print(f"Total words: {total_words}")
     print(f"Total diacritic positions: {total_diacritic_chars}")
@@ -155,11 +171,13 @@ def main():
                        help='Save detailed results to file')
     parser.add_argument('--context-size', type=int,
                        help='Override context size (use model default if not specified)')
+    parser.add_argument('--num-passes', type=int, default=1,
+                       help='Number of restoration passes to perform (default: 1). Multiple passes can improve restoration of words with multiple diacritics.')
 
     args = parser.parse_args()
 
     char_acc, word_acc, diacritic_acc = evaluate_constrained_model(
-        args.model, args.test_file, args.output, args.context_size
+        args.model, args.test_file, args.output, args.context_size, args.num_passes
     )
 
     # Exit with status based on diacritic accuracy (most important metric)
