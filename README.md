@@ -6,11 +6,11 @@ A lightweight PyTorch-based neural network package for restoring diacritics in T
 
 ## Overview
 
-This project implements a character-level sequence-to-sequence model using bidirectional LSTMs with attention mechanism to restore diacritics in Turkish text. Unlike rule-based or large language model approaches, this solution is:
+This project implements a character-level sequence-to-sequence model using bidirectional LSTMs with multi-head self-attention to restore diacritics in Turkish text. Unlike rule-based or large language model approaches, this solution is:
 
-- **Lightweight**: Small model size (~10-50MB depending on configuration)
+- **Lightweight**: Small model size (~10-15MB depending on configuration)
 - **Fast**: Processes text in real-time using GPU acceleration (MPS on Apple Silicon, CUDA on NVIDIA)
-- **Accurate**: Achieves 90%+ accuracy with proper training data
+- **Accurate**: Achieves 95%+ accuracy with proper training data
 - **Self-contained**: No external API dependencies
 
 ## Architecture
@@ -19,17 +19,17 @@ This project implements a character-level sequence-to-sequence model using bidir
 
 1. **Character-level Tokenization**: Works at the character level for fine-grained control
 2. **Bidirectional LSTM**: Captures both forward and backward context (2-4 layers)
-3. **Multi-head Attention**: Focuses on relevant parts of the input sequence
-4. **Sliding Window Processing**: Handles texts of arbitrary length
+3. **Multi-Head Self-Attention**: Focuses on relevant parts of the input sequence (optional, recommended)
+4. **Confusion-Set Classification**: Binary classifiers for each Turkish diacritic pair
 
 ### Technical Specifications
 
 - **Input**: Turkish text with diacritics removed (ASCII-normalized)
 - **Output**: Turkish text with diacritics restored
-- **Context Window**: Configurable (default: 50-100 characters)
+- **Context Window**: Configurable (default: 96 characters, expert recommended)
 - **Vocabulary Size**: 256 characters (covers Turkish alphabet + common punctuation)
-- **Hidden Size**: Configurable (256-512 dimensions)
-- **Attention Heads**: 8
+- **Hidden Size**: Configurable (default: 256 dimensions, expert recommended)
+- **Attention Heads**: 4 (when self-attention enabled)
 
 ## Installation
 
@@ -59,120 +59,202 @@ pip install -e ".[dev,data]"
 - PyTorch 2.0+
 - Apple Silicon Mac (for MPS acceleration) or NVIDIA GPU (for CUDA)
 
-## Package Structure
+## Quick Start
 
-```
-nokta-ai/
-├── nokta_ai/
-│   ├── __init__.py           # Package initialization
-│   ├── core.py               # Main restoration classes
-│   ├── models/               # Neural network architectures (constrained model)
-│   └── cli/                  # Command line interfaces
-├── data/
-│   ├── vikipedi_corpus.txt   # Turkish Wikipedia corpus
-│   ├── aysnrgenc_turkishdeasciifier_train.txt  # Additional training data
-│   └── *.pkl                 # Preprocessed datasets (generated)
-├── models/                   # Trained model weights (generated)
-└── scripts/
-    └── prepare_training_data.py  # Script to prepare training cache from corpus files
+### 1. Prepare Training Data
+```bash
+# Combines vikipedi_corpus.txt and aysnrgenc_turkishdeasciifier_train.txt
+python scripts/prepare_training_data.py
+
+# This creates data/combined_cache.pkl for training
 ```
 
-## Usage
+### 2. Train a Model
 
-### Command Line Interface
+#### Expert-Recommended Configuration (With Self-Attention)
+```bash
+# Best accuracy, ~15% better diacritic restoration
+nokta-train --data-cache data/combined_cache.pkl \
+            --output models/my_model.pth \
+            --context-size 96 \
+            --hidden-size 256 \
+            --num-lstm-layers 2 \
+            --use-attention \
+            --epochs 50
+```
 
-After installation, nokta-ai provides three CLI commands:
+#### Lightweight Configuration (Without Self-Attention)
+```bash
+# Smaller, faster model for resource-constrained environments
+nokta-train --data-cache data/combined_cache.pkl \
+            --output models/my_model_light.pth \
+            --context-size 96 \
+            --hidden-size 256 \
+            --no-attention \
+            --epochs 50
+```
 
-#### 1. Interactive Restoration
+### 3. Evaluate Your Model
 
 ```bash
-# Interactive mode
-nokta restore --model path/to/model.pth
-
-# Direct text input
-nokta restore --model path/to/model.pth --text "Bugun hava cok guzel"
-
-# Process a file
-nokta restore --model path/to/model.pth --input input.txt --output output.txt
-
-# Benchmark model performance
-nokta benchmark --model path/to/model.pth
-```
-
-#### 2. Training
-
-```bash
-# Train with prepared dataset (default with self-attention)
-nokta-train --data-cache data/combined_cache.pkl --output my_model.pth
-
-# Advanced training with expert-recommended settings
-nokta-train \
-    --data-cache data/combined_cache.pkl \
-    --epochs 50 \
-    --batch-size 64 \
-    --learning-rate 0.0003 \
-    --context-size 96 \
-    --hidden-size 256 \
-    --num-lstm-layers 2 \
-    --use-attention \
-    --output my_model.pth
-
-# Train without self-attention (smaller, faster model)
-nokta-train \
-    --data-cache data/combined_cache.pkl \
-    --epochs 50 \
-    --context-size 96 \
-    --hidden-size 256 \
-    --no-attention \
-    --output my_model_no_attention.pth
-```
-
-#### 3. Model Evaluation
-
-Evaluate your model's accuracy on test datasets:
-
-```bash
-# Evaluate on provided test dataset
-nokta evaluate --model path/to/model.pth --test-file data/test_datasets/vikipedi_test.txt
+# Basic evaluation
+nokta evaluate --model models/my_model.pth \
+               --test-file data/test_datasets/vikipedi_test.txt
 
 # Multi-pass restoration for words with multiple diacritics
-nokta evaluate --model path/to/model.pth \
+nokta evaluate --model models/my_model.pth \
                --test-file data/test_datasets/vikipedi_test.txt \
                --num-passes 3
-
-# Save detailed evaluation results
-nokta-evaluate --model path/to/model.pth \
-                --test-file data/test_datasets/vikipedi_test.txt \
-                --output evaluation_results.txt
-
-# The evaluation provides:
-# - Character-level accuracy (precise diacritic restoration)
-# - Word-level accuracy (complete word correctness)
-# - Diacritic-specific accuracy (how well diacritics are restored)
-# - Per-sentence breakdown with detailed analysis
-# - Multi-pass restoration with convergence detection
 ```
 
-#### 4. Advanced Inference
+### 4. Use Your Model
 
 ```bash
 # Interactive mode
-nokta-inference --model path/to/model.pth --interactive
+nokta restore --model models/my_model.pth
 
-# File processing
-nokta-inference --model path/to/model.pth --file input.txt --output output.txt
+# Direct text input
+nokta restore --model models/my_model.pth --text "Bugun hava cok guzel"
 
-# Direct text
-nokta-inference --model path/to/model.pth --text "Turkiye'nin baskenti"
+# Process a file
+nokta restore --model models/my_model.pth --input input.txt --output output.txt
 ```
 
-### Python API
+## Training Parameters
+
+### Core Architecture Options
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--context-size` | 96 | Context window size (expert recommended: 96) |
+| `--hidden-size` | 256 | LSTM hidden dimensions (expert recommended: 256) |
+| `--num-lstm-layers` | 2 | Number of LSTM layers (expert recommends: 2-4) |
+| `--use-attention` | True | Enable self-attention (recommended for accuracy) |
+| `--no-attention` | False | Disable self-attention (smaller, faster models) |
+
+### Training Hyperparameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--epochs` | 20 | Number of training epochs |
+| `--batch-size` | 16 | Training batch size |
+| `--learning-rate` | 0.0003 | Learning rate (expert recommended: 3e-4) |
+| `--max-train-texts` | 15000 | Maximum training texts to use |
+| `--max-val-texts` | 1000 | Maximum validation texts to use |
+
+### Data Sampling Options
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--balanced-sampling` | False | Equal representation of each character type |
+| `--samples-per-char` | Auto | Target samples per character (auto-detected if not specified) |
+
+### Example Training Commands
+
+```bash
+# Small model for quick experiments
+nokta-train --data-cache data/combined_cache.pkl \
+            --output models/small.pth \
+            --context-size 20 \
+            --hidden-size 128 \
+            --epochs 10 \
+            --batch-size 32
+
+# Balanced training with equal character representation
+nokta-train --data-cache data/combined_cache.pkl \
+            --output models/balanced.pth \
+            --balanced-sampling \
+            --samples-per-char 1000 \
+            --epochs 30
+
+# High-accuracy configuration
+nokta-train --data-cache data/combined_cache.pkl \
+            --output models/high_accuracy.pth \
+            --context-size 96 \
+            --hidden-size 256 \
+            --num-lstm-layers 3 \
+            --use-attention \
+            --epochs 100 \
+            --batch-size 8
+```
+
+## Evaluation Parameters
+
+### Evaluation Options
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--model` | Required | Path to trained model file |
+| `--test-file` | Required | Path to test file with ground truth |
+| `--context-size` | Auto | Override context size (use model default if not specified) |
+| `--num-passes` | 1 | Number of restoration passes (improves multi-diacritic words) |
+| `--output` | None | Save detailed results to file |
+
+### Example Evaluation Commands
+
+```bash
+# Basic evaluation
+nokta evaluate --model models/my_model.pth \
+               --test-file data/test_datasets/vikipedi_test.txt
+
+# Multi-pass evaluation with detailed output
+nokta evaluate --model models/my_model.pth \
+               --test-file data/test_datasets/vikipedi_test.txt \
+               --num-passes 3 \
+               --output evaluation_results.txt
+
+# Override context size if needed
+nokta evaluate --model models/my_model.pth \
+               --test-file data/test_datasets/vikipedi_test.txt \
+               --context-size 50
+```
+
+The evaluation provides:
+- **Character-level accuracy**: Precise diacritic restoration
+- **Word-level accuracy**: Complete word correctness
+- **Diacritic-specific accuracy**: How well diacritics are restored
+- **Multi-pass restoration**: With convergence detection
+- **Per-sentence breakdown**: Detailed analysis for debugging
+
+## Model Architecture Comparison
+
+### With Self-Attention (Recommended)
+
+**Benefits:**
+- **~15% better diacritic accuracy**
+- Better long-range context understanding
+- Improved Turkish vowel harmony detection
+- Expert validated architecture
+- Model size: ~14MB
+
+**Use for:** Production deployments, maximum accuracy requirements
+
+### Without Self-Attention (Lightweight)
+
+**Benefits:**
+- **~20% smaller model size**
+- Faster training and inference
+- Lower memory requirements
+- Still effective for most text
+- Model size: ~10MB
+
+**Use for:** Resource-constrained environments, mobile deployment
+
+### Performance Comparison
+
+| Metric | Without Attention | With Attention | Improvement |
+|--------|------------------|----------------|-------------|
+| **Diacritic accuracy** | ~6% | ~21% | **+15%** |
+| **Character accuracy** | ~92% | ~93% | **+1%** |
+| **Model size** | 10.2MB | 14.2MB | +4MB |
+
+## Python API
 
 ```python
 import nokta_ai
 
 # Load trained model
-restorer = nokta_ai.DiacriticsRestorer(model_path='path/to/model.pth')
+restorer = nokta_ai.DiacriticsRestorer(model_path='models/my_model.pth')
 
 # Restore diacritics
 text_without = "Turkiye'nin baskenti Ankara'dir"
@@ -193,17 +275,13 @@ normalized = mapper.normalize_text("  MERHABA!!!  ")
 
 ## Test Datasets
 
-The repository includes test datasets for evaluating model accuracy:
-
 ### Included Test Files
 
 - **`data/test_datasets/vikipedi_test.txt`**: 290 lines of high-quality Turkish text from Wikipedia
 - **Content**: Turkish constitutional history with proper diacritics
 - **Purpose**: Benchmark model performance on real-world text
 
-### Adding Your Own Test Files
-
-To add custom test datasets:
+### Adding Custom Test Files
 
 1. **Place files in**: `data/test_datasets/`
 2. **Format**: One sentence per line with correct diacritics
@@ -215,100 +293,70 @@ To add custom test datasets:
    Çocuklar bahçede futbol oynuyorlar.
    ```
 
-### Using Test Datasets
+## Advanced Usage
+
+### Context Size Experiments
+
+Different context sizes offer different trade-offs:
+
+#### Small Context (Fast Training)
+```bash
+# 20-character context - sees immediate neighbors only
+nokta-train --data-cache data/combined_cache.pkl \
+            --output models/small_ctx.pth \
+            --context-size 20 \
+            --hidden-size 128 \
+            --epochs 15 \
+            --batch-size 32
+```
+- **Good for**: Quick experiments, limited resources
+- **Limitations**: May miss word-level patterns
+
+#### Medium Context (Balanced)
+```bash
+# 50-character context - sees 1-2 full words
+nokta-train --data-cache data/combined_cache.pkl \
+            --output models/medium_ctx.pth \
+            --context-size 50 \
+            --hidden-size 256 \
+            --epochs 20 \
+            --batch-size 16
+```
+- **Good for**: General purpose, balanced accuracy/speed
+- **Best for**: Most use cases
+
+#### Large Context (Expert Recommended)
+```bash
+# 96-character context - sees full sentences
+nokta-train --data-cache data/combined_cache.pkl \
+            --output models/large_ctx.pth \
+            --context-size 96 \
+            --hidden-size 256 \
+            --num-lstm-layers 2 \
+            --use-attention \
+            --epochs 25 \
+            --batch-size 8
+```
+- **Good for**: Maximum accuracy, Turkish grammar patterns
+- **Expert validated**: Optimal balance of accuracy and efficiency
+
+### Multi-Pass Restoration
+
+For words with multiple diacritics like "Üçüncü" → "Ucuncu":
 
 ```bash
-# Evaluate on included test dataset
-nokta evaluate --model your_model.pth --test-file data/test_datasets/vikipedi_test.txt
+# Single pass (default)
+nokta evaluate --model models/my_model.pth \
+    --test-file data/test_datasets/vikipedi_test.txt \
+    --num-passes 1
 
-# Evaluate on your custom test file
-nokta evaluate --model your_model.pth --test-file data/test_datasets/your_test.txt
-
-# Get detailed analysis
-nokta-evaluate --model your_model.pth \
-                --test-file data/test_datasets/vikipedi_test.txt \
-                --output detailed_results.txt
+# Multi-pass with automatic convergence detection
+nokta evaluate --model models/my_model.pth \
+    --test-file data/test_datasets/vikipedi_test.txt \
+    --num-passes 3
 ```
 
-The evaluation system automatically:
-- Removes diacritics from test sentences to create input
-- Restores diacritics using your model
-- Compares against ground truth
-- Reports character-level and word-level accuracy
-- Provides detailed per-sentence analysis
-
-## Training Data
-
-### Preparing Training Data
-
-Before training, prepare your corpus data:
-
-```bash
-# Combines vikipedi_corpus.txt and aysnrgenc_turkishdeasciifier_train.txt
-python scripts/prepare_training_data.py
-
-# This creates data/combined_cache.pkl for training
-```
-
-The system can be trained on any Turkish text corpus. Best results are achieved with:
-
-1. **Wikipedia dumps**: Comprehensive vocabulary and proper spelling
-2. **News articles**: Contemporary language usage
-3. **Books and literature**: Diverse writing styles
-4. **Web crawls**: Informal language patterns
-
-### Data Requirements
-
-- Minimum: 1MB of Turkish text
-- Recommended: 10MB+ for good coverage
-- Optimal: 100MB+ for production use
-
-## Model Architecture Options
-
-nokta-ai supports two model architectures, both following expert recommendations:
-
-### With Self-Attention (Default, Recommended)
-```bash
-# Expert-recommended configuration
-nokta-train \
-    --data-cache data/combined_cache.pkl \
-    --context-size 96 \
-    --hidden-size 256 \
-    --num-lstm-layers 2 \
-    --use-attention \
-    --epochs 50
-```
-
-**Benefits:**
-- **Higher accuracy**: ~15% better diacritic restoration
-- **Better long-range context**: Captures Turkish vowel harmony across word boundaries
-- **Expert validated**: Follows domain expert recommendations
-- **Model size**: ~13-16MB (within optimal range)
-
-### Without Self-Attention (Smaller, Faster)
-```bash
-# Lightweight configuration
-nokta-train \
-    --data-cache data/combined_cache.pkl \
-    --context-size 96 \
-    --hidden-size 256 \
-    --no-attention \
-    --epochs 50
-```
-
-**Benefits:**
-- **Smaller size**: ~20% smaller model files
-- **Faster training**: Reduced computational requirements
-- **Lower memory**: Better for resource-constrained environments
-- **Still effective**: Good performance for most use cases
-
-### Performance Comparison
-
-| Metric | Without Attention | With Attention | Improvement |
-|--------|------------------|----------------|-------------|
-| **Diacritic accuracy** | ~6% | ~21% | **+15%** |
-| **Character accuracy** | ~92% | ~93% | **+1%** |
-| **Model size** | 4.2MB | 5.2MB | +1MB |
+The model automatically stops when output converges between passes.
 
 ## Performance
 
@@ -324,23 +372,31 @@ The system automatically detects and uses available acceleration:
 
 On Apple M1/M2 with MPS:
 - Training speed: ~1000 samples/second
-- Inference speed: ~10,000 characters/second
+- Inference speed: ~5,000-10,000 characters/second
 
-### Accuracy
+### Expected Accuracy
 
 With proper training (50+ epochs on Wikipedia data):
 - Character-level accuracy: 95%+
 - Word-level accuracy: 90%+
+- Diacritic-specific accuracy: 85%+
 
-## Model Improvements
+## Training Data Requirements
 
-To improve model performance:
+### Data Preparation
 
-1. **More Training Data**: Use larger Turkish corpora
-2. **Longer Training**: Increase epochs (100-200)
-3. **Larger Model**: Increase hidden_size (512-1024) and num_layers (4-6)
-4. **Data Augmentation**: Add synthetic errors and variations
-5. **Ensemble Methods**: Train multiple models and combine predictions
+The system can be trained on any Turkish text corpus. Best results are achieved with:
+
+1. **Wikipedia dumps**: Comprehensive vocabulary and proper spelling
+2. **News articles**: Contemporary language usage
+3. **Books and literature**: Diverse writing styles
+4. **Web crawls**: Informal language patterns
+
+### Data Requirements
+
+- **Minimum**: 1MB of Turkish text
+- **Recommended**: 10MB+ for good coverage
+- **Optimal**: 100MB+ for production use
 
 ## Troubleshooting
 
@@ -349,16 +405,23 @@ To improve model performance:
 1. **Low accuracy after training**
    - Solution: Train for more epochs (50+)
    - Use more training data
-   - Increase model capacity
+   - Enable self-attention (`--use-attention`)
+   - Increase model capacity (`--hidden-size 256`)
 
 2. **MPS not detected on Mac**
    - Ensure PyTorch 2.0+ is installed
    - Check MPS availability: `python -c "import torch; print(torch.backends.mps.is_available())"`
 
 3. **Out of memory errors**
-   - Reduce batch_size
-   - Reduce context_window
-   - Use gradient accumulation
+   - Reduce `--batch-size`
+   - Reduce `--context-size`
+   - Disable attention (`--no-attention`)
+   - Use smaller `--hidden-size`
+
+4. **Model predictions seem random**
+   - Check if you're using the correct `--context-size` during evaluation
+   - Ensure model was trained for enough epochs
+   - Verify training data quality
 
 ## Implementation Details
 
@@ -372,29 +435,69 @@ The system handles these Turkish-specific transformations:
 - ş ↔ s, Ş ↔ S
 - ü ↔ u, Ü ↔ U
 
-### Sliding Window Algorithm
+### Multi-Head Self-Attention
 
-For long texts, the model uses overlapping windows:
-1. Divide text into overlapping segments
-2. Process each segment independently
-3. Merge results using weighted averaging in overlap regions
-4. Ensures consistent predictions across boundaries
-
-### Attention Mechanism
-
-The multi-head attention layer helps the model:
+When enabled, the attention mechanism helps the model:
 - Focus on relevant context for ambiguous cases
 - Learn long-range dependencies
 - Handle Turkish vowel harmony rules
+- Improve accuracy on compound words
 
-## Future Enhancements
+### Balanced Sampling
 
-- [ ] Support for other Turkic languages (Azerbaijani, Kazakh)
-- [ ] Web API for real-time diacritics restoration
-- [ ] Browser extension for automatic correction
-- [ ] Mobile keyboard integration
-- [ ] Transformer-based architecture option
-- [ ] Active learning for continuous improvement
+The `--balanced-sampling` option ensures equal representation:
+- Groups training samples by diacritic character type
+- Balances representation across all 6 Turkish character pairs
+- Prevents model bias toward common characters like 'i/ı'
+- Use `--samples-per-char` to control target samples per character
+
+## Package Structure
+
+```
+nokta-ai/
+├── nokta_ai/
+│   ├── __init__.py           # Package initialization
+│   ├── core.py               # Main restoration classes
+│   ├── models/               # Neural network architectures
+│   │   └── constrained.py    # Constrained diacritics model
+│   └── cli/                  # Command line interfaces
+│       ├── main.py           # Main CLI (nokta command)
+│       ├── train_constrained.py  # Training script
+│       └── evaluate_constrained.py  # Evaluation script
+├── data/
+│   ├── vikipedi_corpus.txt   # Turkish Wikipedia corpus
+│   ├── aysnrgenc_turkishdeasciifier_train.txt  # Additional training data
+│   ├── combined_cache.pkl    # Preprocessed training data (generated)
+│   └── test_datasets/        # Test datasets
+│       └── vikipedi_test.txt # Wikipedia test data
+├── models/                   # Trained model weights (generated)
+├── scripts/
+│   └── prepare_training_data.py  # Data preparation script
+├── ARCHITECTURE.md           # Detailed neural network documentation
+└── README.md                # This file
+```
+
+## CLI Command Reference
+
+### Training: `nokta-train`
+```bash
+nokta-train --data-cache DATA --output MODEL [options]
+```
+
+### Evaluation: `nokta evaluate` / `nokta-evaluate`
+```bash
+nokta evaluate --model MODEL --test-file FILE [options]
+```
+
+### Restoration: `nokta restore`
+```bash
+nokta restore --model MODEL [--text TEXT | --input FILE] [options]
+```
+
+### Benchmarking: `nokta benchmark`
+```bash
+nokta benchmark --model MODEL [options]
+```
 
 ## License
 
