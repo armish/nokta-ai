@@ -25,7 +25,7 @@ def filter_text(text):
         code = ord(char)
         if code > 255:
             # Replace with closest ASCII equivalent or space
-            if char in 'çğışöüÇĞIŞÖÜ':
+            if char.lower() in 'çğışöü':
                 # Keep Turkish diacritics as they're handled by remove_diacritics_simple
                 filtered_chars.append(char)
             else:
@@ -33,6 +33,47 @@ def filter_text(text):
         else:
             filtered_chars.append(char)
     return ''.join(filtered_chars)
+
+
+def preserve_case_pattern(original_text, restored_text):
+    """Apply the case pattern from original text to restored text with Turkish-specific handling"""
+    result = []
+    for i, (orig_char, restored_char) in enumerate(zip(original_text, restored_text)):
+        if orig_char.isupper():
+            # Turkish-specific uppercase handling
+            if restored_char == 'i':
+                result.append('İ')  # i → İ (with dot)
+            elif restored_char == 'ı':
+                result.append('I')  # ı → I (without dot)
+            else:
+                result.append(restored_char.upper())
+        else:
+            # Turkish-specific lowercase handling
+            if restored_char == 'İ':
+                result.append('i')  # İ → i (with dot)
+            elif restored_char == 'I':
+                result.append('ı')  # I → ı (without dot)
+            else:
+                result.append(restored_char.lower())
+    return ''.join(result)
+
+
+def normalize_case_for_training(text):
+    """Convert text to lowercase for training with Turkish-specific handling"""
+    case_pattern = [char.isupper() for char in text]
+
+    # Turkish-specific lowercase conversion
+    result = []
+    for char in text:
+        if char == 'İ':
+            result.append('i')  # İ → i (with dot)
+        elif char == 'I':
+            result.append('ı')  # I → ı (without dot)
+        else:
+            result.append(char.lower())
+
+    lowercase_text = ''.join(result)
+    return lowercase_text, case_pattern
 
 
 def detect_optimal_device(verbose=True):
@@ -162,19 +203,14 @@ class ConstrainedDiacriticsModel(nn.Module):
     """
 
     # Define the Turkish diacritic pairs we care about
+    # Simplified to lowercase only - case will be preserved separately
     DIACRITIC_PAIRS = {
         'c': ['c', 'ç'],
-        'C': ['C', 'Ç'],
         'g': ['g', 'ğ'],
-        'G': ['G', 'Ğ'],
         'i': ['i', 'ı'],
-        'I': ['I', 'İ'],
         'o': ['o', 'ö'],
-        'O': ['O', 'Ö'],
         's': ['s', 'ş'],
-        'S': ['S', 'Ş'],
-        'u': ['u', 'ü'],
-        'U': ['U', 'Ü']
+        'u': ['u', 'ü']
     }
 
     def __init__(self, context_size: int = 100, hidden_size: int = 128,
@@ -306,27 +342,31 @@ class ConstrainedDiacriticsRestorer:
         if not text.strip():
             return text
 
-        # Pad text for context
+        # Store original case pattern and normalize to lowercase for processing
+        original_text = text
+        normalized_text, case_pattern = normalize_case_for_training(text)
+
+        # Pad normalized text for context
         pad_char = ' '
         padding = pad_char * (self.context_size // 2)
-        padded_text = padding + text + padding
+        padded_text = padding + normalized_text + padding
 
         # Extract context windows for each character
         contexts = []
         target_chars = []
 
-        for i in range(len(text)):
-            # Get context window around character i (in original text)
+        for i in range(len(normalized_text)):
+            # Get context window around character i (in normalized text)
             start_idx = i  # Position in padded text
             context_window = padded_text[start_idx:start_idx + self.context_size]
 
             # Convert to character codes with bounds checking
             context_codes = [safe_ord(c) for c in context_window]
             contexts.append(context_codes)
-            target_chars.append(safe_ord(text[i]))
+            target_chars.append(safe_ord(normalized_text[i]))
 
         if not contexts:
-            return text
+            return original_text
 
         # Convert to tensors
         context_tensor = torch.tensor([contexts], dtype=torch.long).to(self.device)  # (1, len, context_size)
@@ -336,8 +376,8 @@ class ConstrainedDiacriticsRestorer:
         with torch.no_grad():
             predictions = self.model(context_tensor, target_tensor)
 
-        # Apply predictions to restore diacritics
-        result_chars = list(text)  # Start with original text
+        # Apply predictions to restore diacritics (working with normalized lowercase text)
+        result_chars = list(normalized_text)  # Start with normalized text
 
         for base_char, pred_data in predictions.items():
             if 'logits' in pred_data and 'mask' in pred_data:
@@ -354,7 +394,11 @@ class ConstrainedDiacriticsRestorer:
                 for pos_idx, variant_idx in zip(match_positions, predicted_variants):
                     result_chars[pos_idx] = variants[variant_idx]
 
-        return ''.join(result_chars)
+        # Restore original case pattern
+        restored_lowercase = ''.join(result_chars)
+        final_result = preserve_case_pattern(original_text, restored_lowercase)
+
+        return final_result
 
     def save_model(self, path: str):
         """Save model checkpoint"""
@@ -422,9 +466,12 @@ def create_constrained_training_data(texts, context_size=100):
         # Filter text to remove characters outside embedding range
         text = filter_text(text)
 
+        # Normalize case for simplified training
+        normalized_text, case_pattern = normalize_case_for_training(text)
+
         # Remove diacritics to create input
-        input_text = remove_diacritics_simple(text)
-        target_text = text
+        input_text = remove_diacritics_simple(normalized_text)
+        target_text = normalized_text
 
         if input_text == target_text:
             continue  # Skip if no diacritics to restore
@@ -474,14 +521,14 @@ def create_constrained_training_data(texts, context_size=100):
 
 
 def remove_diacritics_simple(text):
-    """Simple diacritic removal for the constrained pairs"""
+    """Simple diacritic removal for the constrained pairs (lowercase only)"""
     replacements = {
-        'ç': 'c', 'Ç': 'C',
-        'ğ': 'g', 'Ğ': 'G',
-        'ı': 'i', 'İ': 'I',
-        'ö': 'o', 'Ö': 'O',
-        'ş': 's', 'Ş': 'S',
-        'ü': 'u', 'Ü': 'U'
+        'ç': 'c',
+        'ğ': 'g',
+        'ı': 'i',
+        'ö': 'o',
+        'ş': 's',
+        'ü': 'u'
     }
     for diacritic, base in replacements.items():
         text = text.replace(diacritic, base)
