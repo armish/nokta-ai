@@ -10,6 +10,31 @@ import math
 import warnings
 
 
+def safe_ord(char):
+    """Convert character to ordinal, clamping to valid embedding range (0-255)"""
+    code = ord(char)
+    if code > 255:
+        return 32  # ASCII space as fallback
+    return code
+
+
+def filter_text(text):
+    """Filter text to ensure all characters are within valid range"""
+    filtered_chars = []
+    for char in text:
+        code = ord(char)
+        if code > 255:
+            # Replace with closest ASCII equivalent or space
+            if char in 'çğışöüÇĞIŞÖÜ':
+                # Keep Turkish diacritics as they're handled by remove_diacritics_simple
+                filtered_chars.append(char)
+            else:
+                filtered_chars.append(' ')  # Replace with space
+        else:
+            filtered_chars.append(char)
+    return ''.join(filtered_chars)
+
+
 def detect_optimal_device(verbose=True):
     """
     Detect optimal device for PyTorch operations with detailed logging and warnings.
@@ -236,7 +261,7 @@ class ConstrainedDiacriticsModel(nn.Module):
         predictions = {}
         for base_char, classifier in self.classifiers.items():
             # Only classify positions that have this base character
-            mask = (target_chars == ord(base_char))
+            mask = (target_chars == safe_ord(base_char))
 
             if mask.any():
                 masked_features = features[mask]  # (num_matches, hidden*2)
@@ -295,10 +320,10 @@ class ConstrainedDiacriticsRestorer:
             start_idx = i  # Position in padded text
             context_window = padded_text[start_idx:start_idx + self.context_size]
 
-            # Convert to character codes
-            context_codes = [ord(c) for c in context_window]
+            # Convert to character codes with bounds checking
+            context_codes = [safe_ord(c) for c in context_window]
             contexts.append(context_codes)
-            target_chars.append(ord(text[i]))
+            target_chars.append(safe_ord(text[i]))
 
         if not contexts:
             return text
@@ -382,15 +407,20 @@ class ConstrainedDiacriticsRestorer:
 def create_constrained_training_data(texts, context_size=100):
     """Create training data for the constrained model"""
     training_samples = []
+    invalid_chars_count = 0
+
 
     for text in texts:
         if len(text) < 3:
             continue
 
-        # Normalize text
+        # Normalize and filter text
         text = text.strip()
         if not text:
             continue
+
+        # Filter text to remove characters outside embedding range
+        text = filter_text(text)
 
         # Remove diacritics to create input
         input_text = remove_diacritics_simple(text)
@@ -409,16 +439,16 @@ def create_constrained_training_data(texts, context_size=100):
         labels = {}
 
         for i in range(len(input_text)):
-            # Context window
+            # Context window with safe character conversion
             start_idx = i
             context_window = padded_input[start_idx:start_idx + context_size]
-            context_codes = [ord(c) for c in context_window]
+            context_codes = [safe_ord(c) for c in context_window]
             contexts.append(context_codes)
 
             # Target character and label
             input_char = input_text[i]
             target_char = target_text[i]
-            targets.append(ord(input_char))
+            targets.append(safe_ord(input_char))
 
             # If this character has a diacritic variant, record the label
             if input_char in ConstrainedDiacriticsModel.DIACRITIC_PAIRS:
