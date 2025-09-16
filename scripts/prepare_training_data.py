@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
 Prepare Turkish corpus data for diacritics restoration training
-Combines multiple corpus files: vikipedi_corpus.txt and aysnrgenc_turkishdeasciifier_train.txt
+Accepts one or more text files to combine into training data
 """
 
 import os
+import sys
 import pickle
 import random
+import argparse
 from pathlib import Path
 from typing import List, Tuple
 
@@ -42,21 +44,17 @@ def load_corpus_file(file_path: str) -> List[str]:
     return paragraphs
 
 
-def load_all_corpus_files() -> List[str]:
-    """Load and combine all available corpus files"""
-    corpus_files = [
-        "data/vikipedi_corpus.txt",
-        "data/aysnrgenc_turkishdeasciifier_train.txt"
-    ]
-
+def load_all_corpus_files(file_paths: List[str]) -> List[str]:
+    """Load and combine all specified corpus files"""
     all_paragraphs = []
 
-    for file_path in corpus_files:
+    for file_path in file_paths:
         if Path(file_path).exists():
             paragraphs = load_corpus_file(file_path)
             all_paragraphs.extend(paragraphs)
         else:
-            print(f"Warning: {file_path} not found, skipping...")
+            print(f"Error: {file_path} not found!")
+            sys.exit(1)
 
     print(f"Total paragraphs loaded: {len(all_paragraphs)}")
     return all_paragraphs
@@ -81,10 +79,16 @@ def create_training_samples(paragraphs: List[str],
     return samples
 
 
-def prepare_wikipedia_dataset(train_ratio: float = 0.8):
+def prepare_dataset(file_paths: List[str],
+                   output_file: str = "data/combined_cache.pkl",
+                   train_ratio: float = 0.8):
     """Prepare combined corpus dataset for training"""
     print("Loading corpus files...")
-    paragraphs = load_all_corpus_files()
+    paragraphs = load_all_corpus_files(file_paths)
+
+    if not paragraphs:
+        print("Error: No paragraphs loaded from input files!")
+        sys.exit(1)
 
     # Create training samples
     print("Creating training samples...")
@@ -100,11 +104,10 @@ def prepare_wikipedia_dataset(train_ratio: float = 0.8):
     val_samples = samples[split_idx:]
 
     # Save to cache
-    cache_dir = Path("data")
-    cache_dir.mkdir(exist_ok=True)
+    cache_path = Path(output_file)
+    cache_path.parent.mkdir(exist_ok=True)
 
-    cache_file = cache_dir / "combined_cache.pkl"
-    with open(cache_file, 'wb') as f:
+    with open(cache_path, 'wb') as f:
         pickle.dump({
             'train': train_samples,
             'validation': val_samples
@@ -113,17 +116,91 @@ def prepare_wikipedia_dataset(train_ratio: float = 0.8):
     print(f"\nDataset prepared:")
     print(f"  Training samples: {len(train_samples)}")
     print(f"  Validation samples: {len(val_samples)}")
-    print(f"  Cache file: {cache_file}")
+    print(f"  Cache file: {cache_path}")
 
     # Show sample
-    print("\nSample training text:")
-    print(train_samples[0][:300] + "...")
+    if train_samples:
+        print("\nSample training text:")
+        print(train_samples[0][:300] + "...")
 
-    return str(cache_file)
+    return str(cache_path)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Prepare Turkish corpus data for diacritics restoration training',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Basic usage with default Turkish deasciifier training data
+  python scripts/prepare_training_data.py data/aysnrgenc_turkishdeasciifier_train.txt
+
+  # Combine multiple corpus files
+  python scripts/prepare_training_data.py file1.txt file2.txt file3.txt
+
+  # Specify custom output location
+  python scripts/prepare_training_data.py data/*.txt --output data/my_cache.pkl
+
+  # Adjust train/validation split ratio
+  python scripts/prepare_training_data.py corpus.txt --train-ratio 0.9
+        """
+    )
+
+    parser.add_argument(
+        'files',
+        nargs='+',
+        help='Input text files to process (one or more)'
+    )
+
+    parser.add_argument(
+        '--output',
+        '-o',
+        default='data/combined_cache.pkl',
+        help='Output pickle file path (default: data/combined_cache.pkl)'
+    )
+
+    parser.add_argument(
+        '--train-ratio',
+        type=float,
+        default=0.8,
+        help='Training data ratio (default: 0.8, meaning 80%% train, 20%% validation)'
+    )
+
+    parser.add_argument(
+        '--window-size',
+        type=int,
+        default=200,
+        help='Size of text windows for training samples (default: 200)'
+    )
+
+    parser.add_argument(
+        '--stride',
+        type=int,
+        default=100,
+        help='Stride for sliding window (default: 100)'
+    )
+
+    args = parser.parse_args()
+
+    # Validate train ratio
+    if not 0 < args.train_ratio < 1:
+        print(f"Error: train-ratio must be between 0 and 1, got {args.train_ratio}")
+        sys.exit(1)
+
+    print(f"Processing {len(args.files)} file(s)...")
+    for file_path in args.files:
+        print(f"  - {file_path}")
+
+    cache_file = prepare_dataset(
+        file_paths=args.files,
+        output_file=args.output,
+        train_ratio=args.train_ratio
+    )
+
+    print(f"\nDataset ready for training: {cache_file}")
+    print("\nTo train the model, run:")
+    print(f"nokta-train --data-cache {cache_file} --output models/my_model.pth")
 
 
 if __name__ == "__main__":
-    cache_file = prepare_wikipedia_dataset()
-    print(f"\nDataset ready for training: {cache_file}")
-    print("\nTo train the model, run:")
-    print("python train_wiki_model.py")
+    main()

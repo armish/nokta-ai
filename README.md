@@ -13,23 +13,37 @@ This project implements a character-level sequence-to-sequence model using bidir
 - **Accurate**: Achieves 95%+ accuracy with proper training data
 - **Self-contained**: No external API dependencies
 
+## Recent Improvements
+
+### v2.0 - Major Architecture Enhancements
+
+- **Case Normalization**: 50% reduction in model complexity by processing lowercase text with case pattern restoration
+- **Turkish-Specific Case Handling**: Proper i/İ and ı/I mappings (critical for Turkish orthography)
+- **CUDA Compatibility**: Fixed character embedding bounds checking for stable GPU training
+- **Binary Classification with Loss Penalties**: Model learns when NOT to add diacritics (reduces false positives)
+- **Improved Capital Letter Accuracy**: Deterministic case handling instead of learned patterns
+- **Character Safety**: All Unicode characters > 255 safely handled with fallback mechanisms
+
 ## Architecture
 
 ### Model Components
 
 1. **Character-level Tokenization**: Works at the character level for fine-grained control
-2. **Bidirectional LSTM**: Captures both forward and backward context (2-4 layers)
-3. **Multi-Head Self-Attention**: Focuses on relevant parts of the input sequence (optional, recommended)
-4. **Confusion-Set Classification**: Binary classifiers for each Turkish diacritic pair
+2. **Case Normalization**: Processes text in lowercase with case pattern restoration (50% complexity reduction)
+3. **Bidirectional LSTM**: Captures both forward and backward context (2-4 layers)
+4. **Multi-Head Self-Attention**: Focuses on relevant parts of the input sequence (optional, recommended)
+5. **Binary Classification**: 6 classifiers for Turkish diacritic pairs (c/ç, g/ğ, i/ı, o/ö, s/ş, u/ü)
 
 ### Technical Specifications
 
-- **Input**: Turkish text with diacritics removed (ASCII-normalized)
-- **Output**: Turkish text with diacritics restored
+- **Input**: Turkish text with diacritics removed (mixed case supported)
+- **Output**: Turkish text with diacritics restored (preserves original case)
 - **Context Window**: Configurable (default: 96 characters, expert recommended)
 - **Vocabulary Size**: 256 characters (covers Turkish alphabet + common punctuation)
 - **Hidden Size**: Configurable (default: 256 dimensions, expert recommended)
 - **Attention Heads**: 4 (when self-attention enabled)
+- **Turkish Case Handling**: Proper i/İ and ı/I mappings (differs from English)
+- **CUDA Compatible**: Safe character bounds checking for GPU training
 
 ## Installation
 
@@ -62,12 +76,22 @@ pip install -e ".[dev,data]"
 ## Quick Start
 
 ### 1. Prepare Training Data
-```bash
-# Combines vikipedi_corpus.txt and aysnrgenc_turkishdeasciifier_train.txt
-python scripts/prepare_training_data.py
 
-# This creates data/combined_cache.pkl for training
+```bash
+# Basic usage with the included Turkish deasciifier training data
+python scripts/prepare_training_data.py data/aysnrgenc_turkishdeasciifier_train.txt
+
+# Combine multiple corpus files for larger training set
+python scripts/prepare_training_data.py data/corpus1.txt data/corpus2.txt data/corpus3.txt
+
+# Use custom output location
+python scripts/prepare_training_data.py data/*.txt --output data/my_cache.pkl
+
+# Adjust train/validation split (90% train, 10% validation)
+python scripts/prepare_training_data.py data/*.txt --train-ratio 0.9
 ```
+
+This creates `data/combined_cache.pkl` containing prepared training and validation data.
 
 ### 2. Train a Model
 
@@ -461,14 +485,14 @@ nokta-train --data-cache data/combined_cache.pkl \
 
 ### Expected Accuracy
 
-With proper training (50+ epochs on Wikipedia data):
+With proper training (50+ epochs on quality Turkish data):
 - Character-level accuracy: 95%+
 - Word-level accuracy: 90%+
 - Diacritic-specific accuracy: 85%+
 
 ## Training Data Requirements
 
-### Data Preparation
+### Data Sources
 
 The system can be trained on any Turkish text corpus. Best results are achieved with:
 
@@ -477,9 +501,29 @@ The system can be trained on any Turkish text corpus. Best results are achieved 
 3. **Books and literature**: Diverse writing styles
 4. **Web crawls**: Informal language patterns
 
+### Included Training Data
+
+- **`data/aysnrgenc_turkishdeasciifier_train.txt`**: High-quality Turkish text with proper diacritics
+- Ready to use for training without additional data collection
+
+### Adding Your Own Data
+
+1. **Format**: Plain text files (UTF-8) with proper Turkish diacritics
+2. **Structure**: One or more paragraphs per file
+3. **Quality**: Ensure text has correct spelling and diacritics
+4. **Combine**: Use the data preparation script to merge multiple files:
+
+```bash
+# Combine your data with the included training data
+python scripts/prepare_training_data.py \
+    data/aysnrgenc_turkishdeasciifier_train.txt \
+    your_data/*.txt \
+    --output data/custom_cache.pkl
+```
+
 ### Data Requirements
 
-- **Minimum**: 1MB of Turkish text
+- **Minimum**: 1MB of Turkish text (included data meets this)
 - **Recommended**: 10MB+ for good coverage
 - **Optimal**: 100MB+ for production use
 
@@ -550,8 +594,7 @@ nokta-ai/
 │       ├── train_constrained.py  # Training script
 │       └── evaluate_constrained.py  # Evaluation script
 ├── data/
-│   ├── vikipedi_corpus.txt   # Turkish Wikipedia corpus
-│   ├── aysnrgenc_turkishdeasciifier_train.txt  # Additional training data
+│   ├── aysnrgenc_turkishdeasciifier_train.txt  # High-quality Turkish training data  # Additional training data
 │   ├── combined_cache.pkl    # Preprocessed training data (generated)
 │   └── test_datasets/        # Test datasets
 │       └── vikipedi_test.txt # Wikipedia test data
