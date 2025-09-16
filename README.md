@@ -135,13 +135,13 @@ nokta evaluate --model models/my_model.pth \
 
 ```bash
 # Interactive mode
-nokta restore --model models/my_model.pth
+nokta-restore --model models/my_model.pth
 
 # Direct text input
-nokta restore --model models/my_model.pth --text "Bugun hava cok guzel"
+nokta-restore --model models/my_model.pth --text "Bugun hava cok guzel"
 
 # Process a file
-nokta restore --model models/my_model.pth --input input.txt --output output.txt
+nokta-restore --model models/my_model.pth --input input.txt --output output.txt
 ```
 
 ## Training Parameters

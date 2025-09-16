@@ -180,5 +180,38 @@ def main():
     args.func(args)
 
 
+def restore_main():
+    """Entry point for nokta-restore command"""
+    parser = argparse.ArgumentParser(
+        description='Restore Turkish diacritics in text using trained neural network model',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Interactive mode
+  nokta-restore --model models/my_model.pth
+
+  # Direct text input
+  nokta-restore --model models/my_model.pth --text "Bugun hava cok guzel"
+
+  # Process a file
+  nokta-restore --model models/my_model.pth --input input.txt --output output.txt
+        """
+    )
+
+    parser.add_argument('--model', type=str, required=True,
+                       help='Path to trained model file')
+    parser.add_argument('--text', type=str,
+                       help='Text to restore (direct input)')
+    parser.add_argument('--input', type=str,
+                       help='Input file path')
+    parser.add_argument('--output', type=str,
+                       help='Output file path')
+    parser.add_argument('--context-size', type=int,
+                       help='Override context size (default: use value from model checkpoint)')
+
+    args = parser.parse_args()
+    restore_text(args)
+
+
 if __name__ == "__main__":
     main()

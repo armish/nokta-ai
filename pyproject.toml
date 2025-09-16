@@ -56,7 +56,7 @@ Documentation = "https://github.com/armish/nokta-ai#readme"
 [project.scripts]
 nokta = "nokta_ai.cli.main:main"
 nokta-train = "nokta_ai.cli.train_constrained:main"
-nokta-test = "nokta_ai.cli.test_constrained:main"
+nokta-restore = "nokta_ai.cli.main:restore_main"
 nokta-evaluate = "nokta_ai.cli.evaluate_constrained:main"
 
 [tool.setuptools.packages.find]
