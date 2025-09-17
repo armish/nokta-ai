@@ -631,17 +631,16 @@ nokta benchmark --model MODEL [options]
 
 MIT License
 
-## Citation
+## 🙏 Acknowledgments
 
-If you use this work in your research, please cite:
+This project builds upon the excellent work of the Turkish NLP community and enthusiasts:
 
-```bibtex
-@software{turkish_diacritics_nn,
-  title = {Turkish Diacritics Restoration with Neural Networks},
-  year = {2024},
-  url = {https://github.com/armish/nokta-ai}
-}
-```
+- [TurkishDeasciifier](https://github.com/aysnrgenc/TurkishDeasciifier) by [Aysenur Genc](https://github.com/aysnrgenc)
+- [deasciifier](https://github.com/meacer/deasciifier) by [Mustafa Emre Acer](https://github.com/meacer)
+- [deasciify](https://github.com/denizyuret/deasciify) by [Deniz Yuret](https://github.com/denizyuret)
+- [turkish-deasciifier](https://github.com/emres/turkish-deasciifier) by [Emre Sevinc](https://github.com/emres)
+
+Special thanks to all the other researchers and developers who made Turkish text processing accessible to everyone.
 
 ## Contact
 
